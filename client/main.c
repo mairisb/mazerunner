@@ -8,18 +8,20 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-int main()
-{
-    int ret = 0;
-    int netSocket = socket(AF_INET, SOCK_STREAM, 0);
+#include <arpa/inet.h>
 
-    struct sockaddr_in serverAddress;
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(7443); //Converts integer port to the appropriate data format
-    serverAddress.sin_addr.s_addr = INADDR_ANY; //INADDR_ANY = 0.0.0.0
+int main(int argc, char** argv) {
+    int ret = 0;
+    int netSock = socket(AF_INET, SOCK_STREAM, 0);
+
+    struct sockaddr_in servAddr;
+    servAddr.sin_family = AF_INET;
+    servAddr.sin_port = htons(7443); //Converts integer port to the appropriate data format
+    servAddr.sin_addr.s_addr = inet_addr(argv[1]);
 
     printf("Attempting to connect...\n");
-    ret = connect(netSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress)); //Need to cast sockaddr_int to sockaddr. Connect returns int whether it was successful or not
+    //Need to cast sockaddr_int to sockaddr. Connect returns int whether it was successful or not
+    ret = connect(netSock, (struct sockaddr *) &servAddr, sizeof(servAddr));
     if (ret < 0) {
         perror("Error connecting to server: ");
         exit(1);
@@ -27,10 +29,10 @@ int main()
     printf("Connection established!\n");
 
     char buff[1024] = "";
-    recv(netSocket, &buff, sizeof(buff), 0); //There is an optional flags param as well
+    recv(netSock, &buff, sizeof(buff), 0); //There is an optional flags param as well
     printf("Message from server: %s\n", buff);
 
-    close(netSocket); //Remember to close
+    close(netSock); //Remember to close
 
     return 0;
 }
