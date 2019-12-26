@@ -29,11 +29,6 @@ int players[MAX_PLAYER_COUNT];
 char usernames[MAX_PLAYER_COUNT][MAX_USERNAME_SIZE + 1];
 int connectedPlayerCount = 0;
 
-int numPlaces (int n) {
-    if (n < 10) return 1;
-    return 1 + numPlaces (n / 10);
-}
-
 int usernameTaken(char *username) {
     int i;
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
