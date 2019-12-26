@@ -111,7 +111,7 @@ int socketReceive(int socket, char* response, short responseLen, long timeoutSec
 }
 
 void setJoinGameMessage(char *buff, char *nickname) {
-    sprintf(buff, "01%s", nickname);
+    sprintf(buff, "0%s", nickname);
 }
 
 int main(int argc, char** argv) {
