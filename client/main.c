@@ -1,16 +1,12 @@
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include <fcntl.h>
-#include <unistd.h>
-
+#include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-
-#include <arpa/inet.h>
-
-#include <string.h>
+#include <unistd.h>
 
 #define CONFIG_FILENAME "client.cfg"
 #define NICKNAME_SIZE (16 + 1)
@@ -78,7 +74,7 @@ void socketConnect(int socket, char *ipAddress, int port) {
     remote.sin_addr.s_addr = inet_addr(ipAddress);
     remote.sin_family = AF_INET;
     remote.sin_port = htons(port);
-    printf("Attempting to connect...\n");
+    printf("Attempting to connect to the server...\n");
     if (connect(socket, (struct sockaddr *) &remote, sizeof(struct sockaddr_in)) < 0) {
         perror("Error connecting to server");
         exit(1);
@@ -114,14 +110,23 @@ int socketReceive(int socket, char* response, short responseLen, long timeoutSec
     return retVal;
 }
 
-int main(int argc, char** argv) {
-    readConfig();
+void setJoinGameMessage(char *buff, char *nickname) {
+    sprintf(buff, "01%s", nickname);
+}
 
+int main(int argc, char** argv) {
     int netSock;
-    char buff[BUFF_SIZE] = "0porkchop\0";
+    char nickname[NICKNAME_SIZE];
+    char buff[BUFF_SIZE];
+
+    readConfig();
 
     netSock = socketCreate();
     socketConnect(netSock, serverIp, serverPort);
+
+    printf("Please enter a nickname: ");
+    fgets(nickname, sizeof(nickname), stdin);
+    setJoinGameMessage(buff, nickname);
 
     printf("Attempting to join game...\n");
     socketSend(netSock, buff, sizeof(buff), 20);
