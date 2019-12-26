@@ -8,13 +8,29 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define MAX_TYPE_SIZE 1
+#define MAX_PLAYER_COUNT 8
+#define MAX_USERNAME_SIZE 16
 #define CONFIG_FILENAME "client.cfg"
-#define NICKNAME_SIZE (16 + 1)
 #define BUFF_SIZE 1024
+
+#define LOBBY_INFO_RESP_SIZE (MAX_TYPE_SIZE + 1 + MAX_PLAYER_COUNT * MAX_USERNAME_SIZE + 1)
 
 /* Configuration variables */
 char serverIp[16];
 int serverPort;
+
+void printBytes(char *buff, int size) {
+    int i;
+    for (i = 0; i < size; i++) {
+        if (buff[i] == '\0') {
+            printf("\\0");
+        } else {
+            printf("%c", buff[i]);
+        }
+    }
+    printf("\n");
+}
 
 char *getLine(char *buffer, int bufferMaxSize, FILE *stream) {
     char *result;
@@ -116,8 +132,9 @@ void setJoinGameMessage(char *buff, char *nickname) {
 
 int main(int argc, char** argv) {
     int netSock;
-    char nickname[NICKNAME_SIZE];
+    char nickname[MAX_USERNAME_SIZE + 1];
     char buff[BUFF_SIZE];
+    char lobbyInfoResp[LOBBY_INFO_RESP_SIZE] = "";
 
     readConfig();
 
@@ -132,8 +149,9 @@ int main(int argc, char** argv) {
     socketSend(netSock, buff, sizeof(buff), 20);
 
     strcpy(buff, "");
-    recv(netSock, &buff, sizeof(buff), 0);
-    printf("Message from server: %s\n", buff);
+    recv(netSock, &lobbyInfoResp, LOBBY_INFO_RESP_SIZE, 0);
+    printf("Message from server: ");
+    printBytes(lobbyInfoResp, LOBBY_INFO_RESP_SIZE);
 
     close(netSock);
 

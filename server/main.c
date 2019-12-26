@@ -29,6 +29,18 @@ int players[MAX_PLAYER_COUNT];
 char usernames[MAX_PLAYER_COUNT][MAX_USERNAME_SIZE + 1];
 int connectedPlayerCount = 0;
 
+void printBytes(char *buff, int size) {
+    int i;
+    for (i = 0; i < size; i++) {
+        if (buff[i] == '\0') {
+            printf("\\0");
+        } else {
+            printf("%c", buff[i]);
+        }
+    }
+    printf("\n");
+}
+
 int usernameTaken(char *username) {
     int i;
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
@@ -61,7 +73,8 @@ int socketSend(int socket, char *message, int messageSize) {
         errno = 0;
     }
     else {
-        printf("Message sent %s\n", message);
+        printf("Message sent ");
+        printBytes(message, messageSize);
     }
 
     return ret;
@@ -76,6 +89,34 @@ int socketReceive(int socket, char *message, short messageSize) {
 void respondWithError(int clientSocket, char *errorType) {
     socketSend(clientSocket, errorType, sizeof(errorType));
     close(clientSocket);
+}
+
+int addUsernames(char *buff) {
+    int i;
+    int size = 0;
+    char *ptr = buff;
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        if (players[i] == 0) {
+            continue;
+        }
+
+        int usernameLength = strlen(usernames[i]);
+        strncpy(ptr, usernames[i], usernameLength);
+
+        if (usernameLength == MAX_USERNAME_SIZE) {
+            size += usernameLength;
+            ptr += usernameLength;
+        } else {
+            size += usernameLength + 1;
+            ptr += usernameLength + 1;
+        }
+    }
+
+    if (buff[size - 1] == '\0') {
+        size -= 1;
+    }
+
+    return size;
 }
 
 char *addClientToGame(int clientSocket) {
@@ -123,18 +164,17 @@ char *addClientToGame(int clientSocket) {
 
 void sendLobbyInfoToAll() {
     int i;
+    int actualSize = 2;
     char lobbyInfoMessage[MAX_TYPE_SIZE + 1 + MAX_PLAYER_COUNT * MAX_USERNAME_SIZE + 1] = "";
     sprintf(lobbyInfoMessage, "%s%d", S_LOBBY_INFO, connectedPlayerCount);
 
-    for (i = 0; i < connectedPlayerCount; i++) {
-        strcat(lobbyInfoMessage, usernames[i]);
-    }
+    actualSize += addUsernames(&lobbyInfoMessage[2]);
 
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
         if (players[i] == 0) {
             continue;
         }
-        socketSend(players[i], lobbyInfoMessage, strlen(lobbyInfoMessage));
+        socketSend(players[i], lobbyInfoMessage, actualSize);
     }
 }
 
