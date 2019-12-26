@@ -1,6 +1,3 @@
-/**
- * Command for compiling and running client:
- */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -15,19 +12,67 @@
 
 #include <string.h>
 
+#define CONFIG_FILENAME "client.cfg"
 #define NICKNAME_SIZE (16 + 1)
-#define BUFF_SIZE (1024)
+#define BUFF_SIZE 1024
 
-/**
- * Create a Socket for server communication
- */
+/* Configuration variables */
+char serverIp[16];
+int serverPort;
+
+char *getLine(char *buffer, int bufferMaxSize, FILE *stream) {
+    char *result;
+    int bufferSize;
+
+    result = fgets(buffer, bufferMaxSize, stream);
+
+    if (result == NULL) {
+        return result;
+    }
+
+    bufferSize = strlen(buffer);
+    if (buffer[bufferSize - 1] == '\n') {
+        buffer[bufferSize - 1] = 0;
+
+        if (buffer[bufferSize - 2] == '\r') {
+            buffer[bufferSize - 2] = 0;
+        }
+    }
+
+    return buffer;
+}
+
+void readConfig() {
+    char buffer[BUFF_SIZE];
+    char keyBuffer[BUFF_SIZE];
+    char valueBuffer[BUFF_SIZE];
+    FILE *configFile;
+
+    configFile = fopen(CONFIG_FILENAME, "r");
+    if (configFile == NULL) {
+        printf("Could not open configuration file '%s'", CONFIG_FILENAME);
+        perror("");
+        exit(1);
+    }
+
+    while (getLine(buffer, 1024, configFile) != NULL) {
+        sscanf(buffer, "%s = %s", keyBuffer, valueBuffer);
+        if (strcmp(keyBuffer, "server_ip") == 0) {
+            strcpy(serverIp, valueBuffer);
+        } else if (strcmp(keyBuffer, "server_port") == 0) {
+            sscanf(valueBuffer, "%d", &serverPort);
+        }
+    }
+
+    printf("Client's configuration:\n");
+    printf("\tserver_ip = %s\n", serverIp);
+    printf("\tserver_port = %d\n", serverPort);
+}
+
 int socketCreate() {
     return socket(AF_INET, SOCK_STREAM, 0);
 }
 
-/**
- * Connect socket to the server
- */
 void socketConnect(int socket, char *ipAddress, int port) {
     struct sockaddr_in remote;
     remote.sin_addr.s_addr = inet_addr(ipAddress);
@@ -41,9 +86,6 @@ void socketConnect(int socket, char *ipAddress, int port) {
     printf("Connection established!\n");
 }
 
-/**
- * Send data to the server
- */
 int socketSend(int socket, char* request, short requestLen, long timeoutSec) {
     int retVal;
     struct timeval tv;
@@ -57,9 +99,6 @@ int socketSend(int socket, char* request, short requestLen, long timeoutSec) {
     return retVal;
 }
 
-/**
- * Receive data from the server
- */
 int socketReceive(int socket, char* response, short responseLen, long timeoutSec) {
     int retVal;
     struct timeval tv;
@@ -76,16 +115,15 @@ int socketReceive(int socket, char* response, short responseLen, long timeoutSec
 }
 
 int main(int argc, char** argv) {
+    readConfig();
+
     int netSock;
-    char buff[BUFF_SIZE] = "11porkchop\0";
+    char buff[BUFF_SIZE] = "0porkchop\0";
 
     netSock = socketCreate();
-    socketConnect(netSock, "109.110.2.39", 7443);
+    socketConnect(netSock, serverIp, serverPort);
 
     printf("Attempting to join game...\n");
-    /*
-    send(netSock, buff, sizeof(buff), 0);
-    */
     socketSend(netSock, buff, sizeof(buff), 20);
 
     strcpy(buff, "");
