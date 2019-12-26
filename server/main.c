@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <string.h>
+#include <errno.h>
 
 #define MAX_TYPE_SIZE 1
 #define MAX_USERNAME_SIZE 16
@@ -33,9 +34,41 @@ int numPlaces (int n) {
     return 1 + numPlaces (n / 10);
 }
 
+int usernameTaken(char *username) {
+    int i;
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        if (players[i] != 0) {
+            if (strcmp(username, usernames[i]) == 0) {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+void resetPlayer(int socket) {
+    int i;
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        if (players[i] == socket) {
+            players[i] = 0;
+            usernames[i][0] = '\0';
+            return;
+        }
+    }
+}
+
 int socketSend(int socket, char *message, int messageSize) {
-    int ret = send(socket, message, messageSize, 0);
-    printf("Message sent %s\n", message);
+    int ret = send(socket, message, messageSize, MSG_NOSIGNAL);
+    if (ret < 0) {
+        printf("Client disconnected, removing player\n");
+        resetPlayer(socket);
+        errno = 0;
+    }
+    else {
+        printf("Message sent %s\n", message);
+    }
+
     return ret;
 }
 
@@ -50,7 +83,7 @@ void respondWithError(int clientSocket, char *errorType) {
     close(clientSocket);
 }
 
-int addClientToGame(int clientSocket) {
+char *addClientToGame(int clientSocket) {
     int i;
     char joinGameRequest[MAX_TYPE_SIZE + MAX_USERNAME_SIZE + 1] = "";
     char requestType[2] = "";
@@ -63,7 +96,7 @@ int addClientToGame(int clientSocket) {
                 printf("Request is not in the correct format\n");
                 respondWithError(clientSocket, E_TECHNICAL);
                 printf("Cannot add player to game - incorrect join game request size\n");
-                return 0;
+                return E_TECHNICAL;
             }
 
             strncpy(requestType, joinGameRequest, 1);
@@ -72,7 +105,12 @@ int addClientToGame(int clientSocket) {
                 printf("Expected request type %s but was %s\n", R_JOIN_GAME, requestType);
                 respondWithError(clientSocket, E_TECHNICAL);
                 printf("Cannot add player to game - incorrect join game request type\n");
-                return 0;
+                return E_TECHNICAL;
+            }
+
+            if (usernameTaken(&joinGameRequest[1])) {
+                printf("Cannot add player to game - username taken\n");
+                return E_USERNAME_TAKEN;
             }
 
             strcpy(usernames[i], &joinGameRequest[1]);
@@ -80,12 +118,12 @@ int addClientToGame(int clientSocket) {
             connectedPlayerCount++;
 
             printf("Player successfully added to game\n");
-            return 1;
+            return NULL;
         }
     }
 
     printf("Cannot add player to game - game full\n");
-    return 0;
+    return E_GAME_IN_PROGRESS;
 }
 
 void sendLobbyInfoToAll() {
@@ -97,7 +135,10 @@ void sendLobbyInfoToAll() {
         strcat(lobbyInfoMessage, usernames[i]);
     }
 
-    for (i = 0; i < connectedPlayerCount; i++) {
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        if (players[i] == 0) {
+            continue;
+        }
         socketSend(players[i], lobbyInfoMessage, strlen(lobbyInfoMessage));
     }
 }
@@ -111,17 +152,19 @@ int main() {
     serverAddress.sin_addr.s_addr = INADDR_ANY;
 
     bind(netSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
-    listen(netSocket, 12);
+    listen(netSocket, 30);
     printf("Listening...\n");
 
     while (1) {
+        char *retErrorType = NULL;
         int clientSocket = accept(netSocket, NULL, NULL);
         printf("Client connected\n");
 
-        if (addClientToGame(clientSocket)) {
+        retErrorType = addClientToGame(clientSocket);
+        if (retErrorType == NULL) {
             sendLobbyInfoToAll();
         } else {
-            respondWithError(clientSocket, E_GAME_IN_PROGRESS);
+            respondWithError(clientSocket, retErrorType);
         }
     }
 
