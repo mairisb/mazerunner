@@ -125,7 +125,7 @@ int main(int argc, char** argv) {
     socketConnect(netSock, serverIp, serverPort);
 
     printf("Please enter a nickname: ");
-    fgets(nickname, sizeof(nickname), stdin);
+    getLine(nickname, sizeof(nickname), stdin);
     setJoinGameMessage(buff, nickname);
 
     printf("Attempting to join game...\n");
