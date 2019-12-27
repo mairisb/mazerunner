@@ -12,7 +12,6 @@
 #define MAX_PLAYER_COUNT 8
 #define MAX_USERNAME_SIZE 16
 #define CONFIG_FILENAME "client.cfg"
-#define USERNAME_SIZE (16 + 1)
 #define BUFF_SIZE 1024
 
 enum MsgType {
@@ -132,7 +131,7 @@ int socketSendJoinGame(int socket, char *username) {
 
 int main(int argc, char** argv) {
     int netSock;
-    char username[USERNAME_SIZE];
+    char username[MAX_USERNAME_SIZE + 1];
     char buff[BUFF_SIZE];
     enum MsgType msgType;
 
