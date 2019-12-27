@@ -12,9 +12,26 @@
 #define MAX_PLAYER_COUNT 8
 #define MAX_USERNAME_SIZE 16
 #define CONFIG_FILENAME "client.cfg"
+#define USERNAME_SIZE (16 + 1)
 #define BUFF_SIZE 1024
 
-#define LOBBY_INFO_RESP_SIZE (MAX_TYPE_SIZE + 1 + MAX_PLAYER_COUNT * MAX_USERNAME_SIZE + 1)
+enum MsgType {
+    NO_MESSAGE = 'N',
+    JOIN_GAME = '0',
+    MOVE = '1',
+    LOBBY_INFO = '2',
+    GAME_IN_PROGRESS = '3',
+    USERNAME_TAKEN = '4',
+    GAME_START = '5',
+    MAP_ROW = '6',
+    GAME_UPDATE = '7',
+    PLAYER_DEAD = '8',
+    GAME_END = '9'
+};
+
+char getMesssageType(char *message) {
+    return message[0];
+}
 
 /* Configuration variables */
 char serverIp[16];
@@ -98,60 +115,66 @@ void socketConnect(int socket, char *ipAddress, int port) {
     printf("Connection established!\n");
 }
 
-int socketSend(int socket, char* request, short requestLen, long timeoutSec) {
-    int retVal;
-    struct timeval tv;
-    tv.tv_sec = timeoutSec;
-    tv.tv_usec = 0;
-    if (setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (char *) &tv, sizeof(tv)) < 0) {
-        perror("Error setting 'send timeout' socket option");
-        exit(1);
-    }
-    retVal = send(socket, request, requestLen, 0);
-    return retVal;
+int socketSend(int socket, char* request) {
+    return send(socket, request, strlen(request), 0);
 }
 
-int socketReceive(int socket, char* response, short responseLen, long timeoutSec) {
-    int retVal;
-    struct timeval tv;
-    tv.tv_sec = timeoutSec;
-    tv.tv_usec = 0;
-    if (setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (char *) &tv, sizeof(tv)) < 0) {
-        printf("Time Out\n");
-        return -1;
-        perror("Error setting 'receive timeout' socket option");
-        exit(1);
-    }
-    retVal = recv(socket, response, responseLen, 0);
-    return retVal;
+int socketReceive(int socket, char* buffer, short bufferSize) {
+    strcpy(buffer, "");
+    return recv(socket, buffer, bufferSize, 0);
 }
 
-void setJoinGameMessage(char *buff, char *nickname) {
-    sprintf(buff, "0%s", nickname);
+int socketSendJoinGame(int socket, char *username) {
+    char message[18] = "";
+    sprintf(message, "%c%s", JOIN_GAME, username);
+    return socketSend(socket, message);
 }
 
 int main(int argc, char** argv) {
     int netSock;
-    char nickname[MAX_USERNAME_SIZE + 1];
+    char username[USERNAME_SIZE];
     char buff[BUFF_SIZE];
-    char lobbyInfoResp[LOBBY_INFO_RESP_SIZE] = "";
+    enum MsgType msgType;
 
     readConfig();
 
     netSock = socketCreate();
     socketConnect(netSock, serverIp, serverPort);
 
-    printf("Please enter a nickname: ");
-    getLine(nickname, sizeof(nickname), stdin);
-    setJoinGameMessage(buff, nickname);
+    printf("Enter username: ");
+    getLine(username, sizeof(username), stdin);
 
-    printf("Attempting to join game...\n");
-    socketSend(netSock, buff, sizeof(buff), 20);
+    do {
+        if (msgType == GAME_IN_PROGRESS) {
+            sleep(3);
+        }
 
-    strcpy(buff, "");
-    recv(netSock, &lobbyInfoResp, LOBBY_INFO_RESP_SIZE, 0);
-    printf("Message from server: ");
-    printBytes(lobbyInfoResp, LOBBY_INFO_RESP_SIZE);
+        printf("Attempting to join game...\n");
+        socketSendJoinGame(netSock, username);
+
+        socketReceive(netSock, buff, sizeof(buff));
+
+        msgType = getMesssageType(buff);
+        switch(msgType) {
+            case LOBBY_INFO:
+                printf("Joined game.\n");
+                break;
+            case GAME_IN_PROGRESS:
+                printf("Game already in progress. Will try to join again.\n");
+                break;
+            case USERNAME_TAKEN:
+                printf("Username %s already taken.\nEnter new username to join again: ", username);
+                getLine(username, sizeof(username), stdin);
+                break;
+            default:
+                printf("Error: received unexpected message\n");
+                exit(1);
+        }
+    } while (msgType != LOBBY_INFO);
+
+    /* Handle incoming LOBBY_INFO messages */
+
+    printf("Exit");
 
     close(netSock);
 
