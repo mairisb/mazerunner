@@ -162,7 +162,8 @@ int main(int argc, char** argv) {
                 printf("Game already in progress. Will try to join again.\n");
                 break;
             case USERNAME_TAKEN:
-                printf("Username %s already taken.\nEnter new username to join again: ", username);
+                printf("Username %s already taken.", username);
+                printf("Enter new username to join again: ");
                 getLine(username, sizeof(username), stdin);
                 break;
             default:
