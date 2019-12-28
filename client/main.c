@@ -8,14 +8,15 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "clientcfg.h"
+#include "utility.h"
+
 #define MAX_TYPE_SIZE 1
 #define MAX_PLAYER_COUNT 8
 #define MAX_USERNAME_SIZE 16
-#define CONFIG_FILENAME "client.cfg"
 #define BUFF_SIZE 1024
 
 enum MsgType {
-    NO_MESSAGE = 'N',
     JOIN_GAME = '0',
     MOVE = '1',
     LOBBY_INFO = '2',
@@ -32,10 +33,6 @@ char getMesssageType(char *message) {
     return message[0];
 }
 
-/* Configuration variables */
-char serverIp[16];
-int serverPort;
-
 void printBytes(char *buff, int size) {
     int i;
     for (i = 0; i < size; i++) {
@@ -46,55 +43,6 @@ void printBytes(char *buff, int size) {
         }
     }
     printf("\n");
-}
-
-char *getLine(char *buffer, int bufferMaxSize, FILE *stream) {
-    char *result;
-    int bufferSize;
-
-    result = fgets(buffer, bufferMaxSize, stream);
-
-    if (result == NULL) {
-        return result;
-    }
-
-    bufferSize = strlen(buffer);
-    if (buffer[bufferSize - 1] == '\n') {
-        buffer[bufferSize - 1] = 0;
-
-        if (buffer[bufferSize - 2] == '\r') {
-            buffer[bufferSize - 2] = 0;
-        }
-    }
-
-    return buffer;
-}
-
-void readConfig() {
-    char buffer[BUFF_SIZE];
-    char keyBuffer[BUFF_SIZE];
-    char valueBuffer[BUFF_SIZE];
-    FILE *configFile;
-
-    configFile = fopen(CONFIG_FILENAME, "r");
-    if (configFile == NULL) {
-        printf("Could not open configuration file '%s'", CONFIG_FILENAME);
-        perror("");
-        exit(1);
-    }
-
-    while (getLine(buffer, 1024, configFile) != NULL) {
-        sscanf(buffer, "%s = %s", keyBuffer, valueBuffer);
-        if (strcmp(keyBuffer, "server_ip") == 0) {
-            strcpy(serverIp, valueBuffer);
-        } else if (strcmp(keyBuffer, "server_port") == 0) {
-            sscanf(valueBuffer, "%d", &serverPort);
-        }
-    }
-
-    printf("Client's configuration:\n");
-    printf("\tserver_ip = %s\n", serverIp);
-    printf("\tserver_port = %d\n", serverPort);
 }
 
 int socketCreate() {
@@ -130,15 +78,16 @@ int socketSendJoinGame(int socket, char *username) {
 }
 
 int main(int argc, char** argv) {
+    struct ClientCfg clientCfg;
     int netSock;
     char username[MAX_USERNAME_SIZE + 1];
     char buff[BUFF_SIZE];
     enum MsgType msgType;
 
-    readConfig();
+    setCfg(&clientCfg);
 
     netSock = socketCreate();
-    socketConnect(netSock, serverIp, serverPort);
+    socketConnect(netSock, clientCfg.serverIp, clientCfg.serverPort);
 
     printf("Enter username: ");
     getLine(username, sizeof(username), stdin);
