@@ -32,12 +32,11 @@ void setCfg(struct ClientCfg *clientCfg) {
     }
 
     /* Read config file */
-    while (getLine(line, 1024, file) != NULL) {
+    while (getLine(line, MAX_CFG_LINE_SIZE, file) != NULL) {
         sscanf(line, "%s = %s", key, val);
-        if (isComment(line)) {
-            continue;
+        if (!isComment(line)) {
+            parseSetting(clientCfg, key, val);
         }
-        parseSetting(clientCfg, key, val);
     }
 
     printf("Client's configuration:\n");
