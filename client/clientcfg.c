@@ -33,7 +33,7 @@ void setCfg(struct ClientCfg *clientCfg) {
 
     /* Read config file */
     while (getLine(line, MAX_CFG_LINE_SIZE, file) != NULL) {
-        if (!isComment(line)) {
+        if (strlen(line) > 0 && !isComment(line)) {
             sscanf(line, "%s = %s", key, val);
             parseSetting(clientCfg, key, val);
         }
