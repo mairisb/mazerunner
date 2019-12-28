@@ -23,3 +23,15 @@ char *getLine(char *buffer, int bufferMaxSize, FILE *stream) {
 
     return buffer;
 }
+
+void printBytes(char *buff, int size) {
+    int i;
+    for (i = 0; i < size; i++) {
+        if (buff[i] == '\0') {
+            printf("\\0");
+        } else {
+            printf("%c", buff[i]);
+        }
+    }
+    printf("\n");
+}

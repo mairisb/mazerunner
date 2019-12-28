@@ -33,18 +33,6 @@ char getMesssageType(char *message) {
     return message[0];
 }
 
-void printBytes(char *buff, int size) {
-    int i;
-    for (i = 0; i < size; i++) {
-        if (buff[i] == '\0') {
-            printf("\\0");
-        } else {
-            printf("%c", buff[i]);
-        }
-    }
-    printf("\n");
-}
-
 int socketCreate() {
     return socket(AF_INET, SOCK_STREAM, 0);
 }
