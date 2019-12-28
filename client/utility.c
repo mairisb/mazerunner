@@ -2,26 +2,26 @@
 #include <stdio.h>
 #include <string.h>
 
-char *getLine(char *buffer, int bufferMaxSize, FILE *stream) {
-    char *result;
-    int bufferSize;
+char *getLine(char *buff, int buffMaxSize, FILE *stream) {
+    char *line;
+    int buffSize;
 
-    result = fgets(buffer, bufferMaxSize, stream);
+    line = fgets(buff, buffMaxSize, stream);
 
-    if (result == NULL) {
-        return result;
+    if (line == NULL) {
+        return line;
     }
 
-    bufferSize = strlen(buffer);
-    if (buffer[bufferSize - 1] == '\n') {
-        buffer[bufferSize - 1] = 0;
+    buffSize = strlen(buff);
+    if (buff[buffSize - 1] == '\n') {
+        buff[buffSize - 1] = 0;
 
-        if (buffer[bufferSize - 2] == '\r') {
-            buffer[bufferSize - 2] = 0;
+        if (buff[buffSize - 2] == '\r') {
+            buff[buffSize - 2] = 0;
         }
     }
 
-    return buffer;
+    return buff;
 }
 
 void printBytes(char *buff, int size) {

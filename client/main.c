@@ -11,9 +11,7 @@
 #include "clientcfg.h"
 #include "utility.h"
 
-#define MAX_TYPE_SIZE 1
-#define MAX_PLAYER_COUNT 8
-#define MAX_USERNAME_SIZE 16
+#define MAX_UNAME_SIZE 16
 #define BUFF_SIZE 1024
 
 enum MsgType {
@@ -29,56 +27,56 @@ enum MsgType {
     GAME_END = '9'
 };
 
-char getMesssageType(char *message) {
-    return message[0];
+char getMsgType(char *msg) {
+    return msg[0];
 }
 
-int socketCreate() {
+int sockCreate() {
     return socket(AF_INET, SOCK_STREAM, 0);
 }
 
-void socketConnect(int socket, char *ipAddress, int port) {
+void sockConn(int sock, char *ip, int port) {
     struct sockaddr_in remote;
-    remote.sin_addr.s_addr = inet_addr(ipAddress);
+    remote.sin_addr.s_addr = inet_addr(ip);
     remote.sin_family = AF_INET;
     remote.sin_port = htons(port);
     printf("Attempting to connect to the server...\n");
-    if (connect(socket, (struct sockaddr *) &remote, sizeof(struct sockaddr_in)) < 0) {
+    if (connect(sock, (struct sockaddr *) &remote, sizeof(struct sockaddr_in)) < 0) {
         perror("Error connecting to server");
         exit(1);
     }
     printf("Connection established!\n");
 }
 
-int socketSend(int socket, char* request) {
-    return send(socket, request, strlen(request), 0);
+int sockSend(int sock, char* req) {
+    return send(sock, req, strlen(req), 0);
 }
 
-int socketReceive(int socket, char* buffer, short bufferSize) {
-    strcpy(buffer, "");
-    return recv(socket, buffer, bufferSize, 0);
+int sockRecv(int sock, char* buff, short buffSize) {
+    strcpy(buff, "");
+    return recv(sock, buff, buffSize, 0);
 }
 
-int socketSendJoinGame(int socket, char *username) {
-    char message[18] = "";
-    sprintf(message, "%c%s", JOIN_GAME, username);
-    return socketSend(socket, message);
+int sockSendJoinGame(int sock, char *uname) {
+    char msg[18] = "";
+    sprintf(msg, "%c%s", JOIN_GAME, uname);
+    return sockSend(sock, msg);
 }
 
 int main(int argc, char** argv) {
     struct ClientCfg clientCfg;
     int netSock;
-    char username[MAX_USERNAME_SIZE + 1];
+    char uname[MAX_UNAME_SIZE + 1];
     char buff[BUFF_SIZE];
     enum MsgType msgType;
 
     setCfg(&clientCfg);
 
-    netSock = socketCreate();
-    socketConnect(netSock, clientCfg.serverIp, clientCfg.serverPort);
+    netSock = sockCreate();
+    sockConn(netSock, clientCfg.serverIp, clientCfg.serverPort);
 
     printf("Enter username: ");
-    getLine(username, sizeof(username), stdin);
+    getLine(uname, sizeof(uname), stdin);
 
     do {
         if (msgType == GAME_IN_PROGRESS) {
@@ -86,11 +84,11 @@ int main(int argc, char** argv) {
         }
 
         printf("Attempting to join game...\n");
-        socketSendJoinGame(netSock, username);
+        sockSendJoinGame(netSock, uname);
 
-        socketReceive(netSock, buff, sizeof(buff));
+        sockRecv(netSock, buff, sizeof(buff));
 
-        msgType = getMesssageType(buff);
+        msgType = getMsgType(buff);
         switch(msgType) {
             case LOBBY_INFO:
                 printf("Joined game.\n");
@@ -99,9 +97,9 @@ int main(int argc, char** argv) {
                 printf("Game already in progress. Will try to join again.\n");
                 break;
             case USERNAME_TAKEN:
-                printf("Username %s already taken.", username);
+                printf("Username %s already taken.", uname);
                 printf("Enter new username to join again: ");
-                getLine(username, sizeof(username), stdin);
+                getLine(uname, sizeof(uname), stdin);
                 break;
             default:
                 printf("Error: received unexpected message\n");
