@@ -40,6 +40,6 @@ void setCfg(struct ClientCfg *clientCfg) {
     }
 
     printf("Client's configuration:\n");
-    printf("\%s = %s\n", SETTING_SERVER_IP, clientCfg->serverIp);
+    printf("\t%s = %s\n", SETTING_SERVER_IP, clientCfg->serverIp);
     printf("\t%s = %d\n", SETTING_SERVER_PORT, clientCfg->serverPort);
 }
