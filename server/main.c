@@ -9,9 +9,16 @@
 #include <string.h>
 #include <errno.h>
 
-#define MAX_TYPE_SIZE 1
-#define MAX_USERNAME_SIZE 16
+#define MAP_WIDTH 122
+#define MAP_HEIGHT 21
+
+#define TYPE_SIZE 1
+#define USERNAME_SIZE 16
 #define MAX_PLAYER_COUNT 8
+#define MAP_HEIGHT_SIZE 3
+#define MAP_WIDTH_SIZE 3
+#define X_COORD_SIZE 3
+#define Y_COORD_SIZE 3
 
 #define R_JOIN_GAME "0"
 #define R_MOVE "1"
@@ -25,9 +32,17 @@
 #define E_USERNAME_TAKEN "4"
 #define E_TECHNICAL "A"
 
+#define JOIN_GAME_MSG_SIZE = (TYPE_SIZE + USERNAME_SIZE + 1)
+#define LOBBY_INFO_MSG_SIZE = (TYPE_SIZE + 1 + MAX_PLAYER_COUNT * USERNAME_SIZE + 1)
+#define GAME_START_MSG_SIZE = (TYPE_SIZE + 1 + MAX_PLAYER_COUNT * USERNAME_SIZE + MAP_HEIGHT_SIZE + MAP_WIDTH_SIZE + 1)
+#define MAP_MSG_SIZE = (TYPE_SIZE + 3 + MAP_WIDTH + 1)
+
+typedef enum {false = 0, true = 1} bool;
+
 int players[MAX_PLAYER_COUNT];
-char usernames[MAX_PLAYER_COUNT][MAX_USERNAME_SIZE + 1];
+char usernames[MAX_PLAYER_COUNT][USERNAME_SIZE + 1];
 int connectedPlayerCount = 0;
+int gameStarted = false;
 
 void printBytes(char *buff, int size) {
     int i;
@@ -91,6 +106,15 @@ void respondWithError(int clientSocket, char *errorType) {
     close(clientSocket);
 }
 
+void sendToAll(char *message, int size) {
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        if (players[i] == 0) {
+            continue;
+        }
+        socketSend(players[i], message, size);
+    }
+}
+
 int addUsernames(char *buff) {
     int i;
     int size = 0;
@@ -103,7 +127,7 @@ int addUsernames(char *buff) {
         int usernameLength = strlen(usernames[i]);
         strncpy(ptr, usernames[i], usernameLength);
 
-        if (usernameLength == MAX_USERNAME_SIZE) {
+        if (usernameLength == USERNAME_SIZE) {
             size += usernameLength;
             ptr += usernameLength;
         } else {
@@ -112,16 +136,12 @@ int addUsernames(char *buff) {
         }
     }
 
-    if (buff[size - 1] == '\0') {
-        size -= 1;
-    }
-
     return size;
 }
 
 char *addClientToGame(int clientSocket) {
     int i;
-    char joinGameRequest[MAX_TYPE_SIZE + MAX_USERNAME_SIZE + 1] = "";
+    char joinGameRequest[JOIN_GAME_MSG_SIZE] = "";
     char requestType[2] = "";
 
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
@@ -163,19 +183,42 @@ char *addClientToGame(int clientSocket) {
 }
 
 void sendLobbyInfoToAll() {
-    int i;
     int actualSize = 2;
-    char lobbyInfoMessage[MAX_TYPE_SIZE + 1 + MAX_PLAYER_COUNT * MAX_USERNAME_SIZE + 1] = "";
+    char lobbyInfoMessage[LOBBY_INFO_MSG_SIZE] = "";
     sprintf(lobbyInfoMessage, "%s%d", S_LOBBY_INFO, connectedPlayerCount);
 
     actualSize += addUsernames(&lobbyInfoMessage[2]);
 
-    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-        if (players[i] == 0) {
-            continue;
-        }
-        socketSend(players[i], lobbyInfoMessage, actualSize);
+    sendToAll(lobbyInfoMessage, actualSize);
+}
+
+void sendGameStartMessage() {
+    int actualSize = TYPE_SIZE + 1;
+    char gameStartMessage[GAME_START_MSG_SIZE] = "";
+    sprintf(gameStartMessage, "%s%d", S_GAME_START, connectedPlayerCount);
+
+    actualSize += addUsernames(&gameStartMessage[2]);
+
+    sprintf(&gameStartMessage[actualSize], "%d%d", MAP_WIDTH, MAP_HEIGHT);
+    actualSize += MAP_WIDTH_SIZE + MAP_HEIGHT_SIZE;
+
+    sendToAll(gameStartMessage, actualSize);
+}
+
+void sendMap() {
+    int i;
+    int actualSize = MAP_MSG_SIZE - 1;
+    for (i = 0; i < MAP_HEIGHT; i++) {
+        char mapMessage[MAP_MSG_SIZE] = "";
+        sprintf(mapMessage, "%s%05d%s", S_MAP_ROW, i + 1, "***");
+        sendToAll(mapMessage, actualSize);
     }
+}
+
+void startGame() {
+    gameStarted = true;
+    sendGameStartMessage();
+    sendMap();
 }
 
 int main() {
@@ -198,6 +241,9 @@ int main() {
         retErrorType = addClientToGame(clientSocket);
         if (retErrorType == NULL) {
             sendLobbyInfoToAll();
+            if (connectedPlayerCount == MAX_PLAYER_COUNT) {
+                startGame();
+            }
         } else {
             respondWithError(clientSocket, retErrorType);
         }
