@@ -5,7 +5,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <pthread.h>
 #include <string.h>
 #include <errno.h>
 
@@ -17,6 +16,7 @@
 #define MAX_PLAYER_COUNT 8
 #define MAP_HEIGHT_SIZE 3
 #define MAP_WIDTH_SIZE 3
+
 #define X_COORD_SIZE 3
 #define Y_COORD_SIZE 3
 
@@ -32,17 +32,15 @@
 #define E_USERNAME_TAKEN "4"
 #define E_TECHNICAL "A"
 
-#define JOIN_GAME_MSG_SIZE = (TYPE_SIZE + USERNAME_SIZE + 1)
-#define LOBBY_INFO_MSG_SIZE = (TYPE_SIZE + 1 + MAX_PLAYER_COUNT * USERNAME_SIZE + 1)
-#define GAME_START_MSG_SIZE = (TYPE_SIZE + 1 + MAX_PLAYER_COUNT * USERNAME_SIZE + MAP_HEIGHT_SIZE + MAP_WIDTH_SIZE + 1)
-#define MAP_MSG_SIZE = (TYPE_SIZE + 3 + MAP_WIDTH + 1)
-
-typedef enum {false = 0, true = 1} bool;
+#define JOIN_GAME_MSG_SIZE (TYPE_SIZE + USERNAME_SIZE + 1)
+#define LOBBY_INFO_MSG_SIZE (TYPE_SIZE + 1 + MAX_PLAYER_COUNT * USERNAME_SIZE + 1)
+#define GAME_START_MSG_SIZE (TYPE_SIZE + 1 + MAX_PLAYER_COUNT * USERNAME_SIZE + MAP_HEIGHT_SIZE + MAP_WIDTH_SIZE + 1)
+#define MAP_MSG_SIZE (TYPE_SIZE + 3 + MAP_WIDTH + 1)
 
 int players[MAX_PLAYER_COUNT];
 char usernames[MAX_PLAYER_COUNT][USERNAME_SIZE + 1];
 int connectedPlayerCount = 0;
-int gameStarted = false;
+int gameStarted = 0;
 
 void printBytes(char *buff, int size) {
     int i;
@@ -107,6 +105,7 @@ void respondWithError(int clientSocket, char *errorType) {
 }
 
 void sendToAll(char *message, int size) {
+    int i;
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
         if (players[i] == 0) {
             continue;
@@ -216,7 +215,7 @@ void sendMap() {
 }
 
 void startGame() {
-    gameStarted = true;
+    gameStarted = 1;
     sendGameStartMessage();
     sendMap();
 }
