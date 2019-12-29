@@ -13,6 +13,7 @@
 
 #define MAX_UNAME_SIZE 16
 #define BUFF_SIZE 1024
+#define MAX_PLAYER_CNT 8
 
 enum MsgType {
     JOIN_GAME = '0',
@@ -69,9 +70,14 @@ int main(int argc, char** argv) {
     char uname[MAX_UNAME_SIZE + 1];
     char buff[BUFF_SIZE];
     enum MsgType msgType;
+    int playerCnt;
+    char players[MAX_PLAYER_CNT][MAX_UNAME_SIZE + 1];
+    memset(players, 0, sizeof(players[0][0]) * MAX_PLAYER_CNT * (MAX_UNAME_SIZE + 1));
 
+    /* Read and set client configuration */
     setCfg(&clientCfg);
 
+    /* Create and connect socket to server */
     netSock = sockCreate();
     sockConn(netSock, clientCfg.serverIp, clientCfg.serverPort);
 
@@ -107,10 +113,33 @@ int main(int argc, char** argv) {
         }
     } while (msgType != LOBBY_INFO);
 
-    /* Handle incoming LOBBY_INFO messages */
+    do {
+        playerCnt = buff[1] - '0';
+        int i, j, k;
+        for (i = 0, j = 0, k = 2; i < playerCnt; k++) {
+            if (buff[k] == '\0' || j == 16) {
+                i++;
+                j = 0;
+                continue;
+            }
+            players[i][j] = buff[k];
+            j++;
+        }
+        printf("Players: %d/%d\n", playerCnt, MAX_PLAYER_CNT);
+        for (int i = 0; i < playerCnt; i++) {
+            printf("%s\n", players[i]);
+        }
+
+        sockRecv(netSock, buff, sizeof(buff));
+
+        if (getMsgType(buff) != LOBBY_INFO || getMsgType(buff) != GAME_START) {
+            printf("Error: received unexpected message\n");
+            exit(1);
+        }
+    } while (getMsgType(buff) != GAME_START);
+
 
     printf("Exit");
-
     close(netSock);
 
     return 0;
