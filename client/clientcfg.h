@@ -8,10 +8,12 @@
 
 #define SETTING_SERVER_IP "server_ip"
 #define SETTING_SERVER_PORT "server_port"
+#define SETTING_SCREEN_HEIGHT "screen_height"
 
 struct ClientCfg {
     char serverIp[16];
     int serverPort;
+    int screenHeight;
 };
 
 void setCfg(struct ClientCfg *);

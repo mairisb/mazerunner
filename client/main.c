@@ -115,6 +115,7 @@ int main(int argc, char** argv) {
 
     do {
         playerCnt = buff[1] - '0';
+
         int i, j, k;
         for (i = 0, j = 0, k = 2; i < playerCnt; k++) {
             if (buff[k] == '\0' || j == 16) {
@@ -125,6 +126,9 @@ int main(int argc, char** argv) {
             players[i][j] = buff[k];
             j++;
         }
+        for (int i = 0; i < (clientCfg.screenHeight - playerCnt - 1); i++) {
+            printf("\n");
+        }
         printf("Players: %d/%d\n", playerCnt, MAX_PLAYER_CNT);
         for (int i = 0; i < playerCnt; i++) {
             printf("%s\n", players[i]);
@@ -132,7 +136,7 @@ int main(int argc, char** argv) {
 
         sockRecv(netSock, buff, sizeof(buff));
 
-        if (getMsgType(buff) != LOBBY_INFO || getMsgType(buff) != GAME_START) {
+        if (getMsgType(buff) != LOBBY_INFO && getMsgType(buff) != GAME_START) {
             printf("Error: received unexpected message\n");
             exit(1);
         }

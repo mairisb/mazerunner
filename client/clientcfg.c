@@ -15,6 +15,8 @@ void parseSetting(struct ClientCfg *clientCfg, char *key, char *val) {
         strcpy(clientCfg->serverIp, val);
     } else if (strcmp(key, SETTING_SERVER_PORT) == 0) {
         sscanf(val, "%d", &clientCfg->serverPort);
+    } else if (strcmp(key, SETTING_SCREEN_HEIGHT) == 0) {
+        sscanf(val, "%d", &clientCfg->screenHeight);
     }
 }
 
@@ -42,4 +44,7 @@ void setCfg(struct ClientCfg *clientCfg) {
     printf("Client's configuration:\n");
     printf("\t%s = %s\n", SETTING_SERVER_IP, clientCfg->serverIp);
     printf("\t%s = %d\n", SETTING_SERVER_PORT, clientCfg->serverPort);
+    printf("\t%s = %d\n", SETTING_SCREEN_HEIGHT, clientCfg->screenHeight);
+
+    fclose(file);
 }
