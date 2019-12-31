@@ -1,3 +1,5 @@
+#deifne _POSIX_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -7,6 +9,9 @@
 #include <netinet/in.h>
 #include <string.h>
 #include <errno.h>
+#include <pthread.h>
+#include <signal.h>
+#include <sys/time.h>
 
 #include "servercfg.h"
 #include "utility.h"
@@ -18,9 +23,9 @@
 #define MAX_MAP_WIDTH 999
 #define MAP_HEIGHT_SIZE 3
 #define MAP_WIDTH_SIZE 3
-
 #define X_COORD_SIZE 3
 #define Y_COORD_SIZE 3
+#define MOVE_SIZE 1
 
 #define R_JOIN_GAME "0"
 #define R_MOVE "1"
@@ -38,19 +43,38 @@
 #define LOBBY_INFO_MSG_SIZE (TYPE_SIZE + 1 + MAX_PLAYER_COUNT * USERNAME_SIZE + 1)
 #define GAME_START_MSG_SIZE (TYPE_SIZE + 1 + MAX_PLAYER_COUNT * USERNAME_SIZE + MAP_HEIGHT_SIZE + MAP_WIDTH_SIZE + 1)
 #define MAP_MSG_SIZE (TYPE_SIZE + MAP_WIDTH_SIZE + MAX_MAP_WIDTH + 1)
+#define MOVE_MSG_SIZE (TYPE_SIZE + MOVE_SIZE + 1)
+
+int connectedPlayerCount = 0;
+int players[MAX_PLAYER_COUNT];
+char usernames[MAX_PLAYER_COUNT][USERNAME_SIZE + 1];
+int rowPositions[MAX_PLAYER_COUNT];
+int columnPositions[MAX_PLAYER_COUNT];
 
 int mapWidth = 0;
 int mapHeight = 0;
 char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 2];
-int players[MAX_PLAYER_COUNT];
-char usernames[MAX_PLAYER_COUNT][USERNAME_SIZE + 1];
-int connectedPlayerCount = 0;
+
 int gameStarted = 0;
+pthread_t moveResolverThread;
+pthread_t moveSetterThread;
 
 void printMap(struct ServerCfg *serverCfg) {
     int i;
     for (i = 0; i < mapHeight; i++) {
         printf("%s\n", mapState[i]);
+    }
+}
+
+void checkAndSetSpawnPosition(char *mapRow, int rowLength, int rowPosition) {
+    int i;
+    for (i = 0; i < rowLength; i++) {
+        int cellValue = (int) mapRow[i];
+        if (cellValue >= 65 && cellValue <= 72) {
+            int index = cellValue - 65;
+            rowPositions[index] = rowPosition;
+            columnPositions[index] = i;
+        }
     }
 }
 
@@ -60,7 +84,7 @@ void loadMap(struct ServerCfg *serverCfg) {
 
     mapFile = fopen(serverCfg->mapFile, "r");
     if (mapFile == NULL) {
-        printf("Could not open map file '%s'", serverCfg->mapFile);
+        fprintf(stderr, "Could not open map file '%s'", serverCfg->mapFile);
         perror("");
         exit(1);
     }
@@ -72,7 +96,7 @@ void loadMap(struct ServerCfg *serverCfg) {
                 printf("A map can not be empty\n");
                 exit(1);
             }
-            mapHeight = i;
+            mapHeight = i + 1;
             break;
         }
 
@@ -84,6 +108,7 @@ void loadMap(struct ServerCfg *serverCfg) {
             exit(1);
         }
 
+        checkAndSetSpawnPosition(mapState[i], rowLength, i);
     }
 
     printMap(serverCfg);
@@ -108,6 +133,8 @@ void resetPlayer(int socket) {
         if (players[i] == socket) {
             players[i] = 0;
             usernames[i][0] = '\0';
+            rowPositions[i] = 0;
+            columnPositions[i] = 0;
             return;
         }
     }
@@ -173,47 +200,67 @@ int addUsernames(char *buff) {
     return size;
 }
 
-char *addClientToGame(int clientSocket) {
+int getRandomFreePosition() {
+    int freePositions[MAX_PLAYER_COUNT];
+    size_t freePositionCount;
+    int randomPosition;
+    int lastIndex = 0;
     int i;
-    char joinGameRequest[JOIN_GAME_MSG_SIZE] = "";
-    char requestType[2] = "";
-
-    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-        if (players[i] == 0){
-            socketReceive(clientSocket, joinGameRequest, sizeof(joinGameRequest));
-
-            if (strlen(joinGameRequest) < 2) {
-                printf("Request is not in the correct format\n");
-                respondWithError(clientSocket, E_TECHNICAL);
-                printf("Cannot add player to game - incorrect join game request size\n");
-                return E_TECHNICAL;
-            }
-
-            strncpy(requestType, joinGameRequest, 1);
-
-            if (strcmp(requestType, R_JOIN_GAME) != 0) {
-                printf("Expected request type %s but was %s\n", R_JOIN_GAME, requestType);
-                respondWithError(clientSocket, E_TECHNICAL);
-                printf("Cannot add player to game - incorrect join game request type\n");
-                return E_TECHNICAL;
-            }
-
-            if (usernameTaken(&joinGameRequest[1])) {
-                printf("Cannot add player to game - username taken\n");
-                return E_USERNAME_TAKEN;
-            }
-
-            strcpy(usernames[i], &joinGameRequest[1]);
-            players[i] = clientSocket;
-            connectedPlayerCount++;
-
-            printf("Player successfully added to game\n");
-            return NULL;
+    for (i = 0; i < players; i++) {
+        if (players[i] == 0) {
+            freePositions[lastIndex] = i;
+            lastIndex++;
         }
     }
 
-    printf("Cannot add player to game - game full\n");
-    return E_GAME_IN_PROGRESS;
+    freePositionCount = MAX_PLAYER_COUNT - sizeof(freePositions) / sizeof(freePositions[0]);
+    if (freePositionCount == 0) {
+        return -1;
+    }
+
+    randomPosition = rand() % freePositionCount;
+    return freePositions[randomPosition];
+}
+
+char *addClientToGame(int clientSocket) {
+    char joinGameRequest[JOIN_GAME_MSG_SIZE] = "";
+    char requestType[2] = "";
+
+    int playerPosition = getRandomFreePosition();
+    if (playerPosition < 0) {
+        printf("Cannot add player to game - game full\n");
+        return E_GAME_IN_PROGRESS;
+    }
+
+    socketReceive(clientSocket, joinGameRequest, sizeof(joinGameRequest));
+
+    if (strlen(joinGameRequest) < 2) {
+        printf("Request is not in the correct format\n");
+        respondWithError(clientSocket, E_TECHNICAL);
+        printf("Cannot add player to game - incorrect join game request size\n");
+        return E_TECHNICAL;
+    }
+
+    strncpy(requestType, joinGameRequest, 1);
+
+    if (strcmp(requestType, R_JOIN_GAME) != 0) {
+        printf("Expected request type %s but was %s\n", R_JOIN_GAME, requestType);
+        respondWithError(clientSocket, E_TECHNICAL);
+        printf("Cannot add player to game - incorrect join game request type\n");
+        return E_TECHNICAL;
+    }
+
+    if (usernameTaken(&joinGameRequest[1])) {
+        printf("Cannot add player to game - username taken\n");
+        return E_USERNAME_TAKEN;
+    }
+
+    strcpy(usernames[playerPosition], &joinGameRequest[1]);
+    players[playerPosition] = clientSocket;
+    connectedPlayerCount++;
+
+    printf("Player successfully added to game\n");
+    return NULL;
 }
 
 void sendLobbyInfoToAll() {
@@ -249,16 +296,96 @@ void sendMap() {
     }
 }
 
-void startGame() {
-    gameStarted = 1;
+void setIncomingMoves() {
+    printf("Not implemented yet\n");
+}
+
+void resolveIncomingMoves() {
+    printf("Not implemented yet\n");
+}
+
+void startRefresh() {
+    int ret;
+    struct sigaction sa;
+    struct itimerval timerVal;
+
+    sa.sa_handler = resolveIncomingMoves();
+    sa.sa_flags = SA_NODEFER; //| SA_RESETHAND;
+    ret = sigaction(SIGALRM, &sa, NULL);
+    if (ret < 0) {
+        perror("Failed to set sigaction");
+        exit(1);
+    }
+
+    timerVal.it_value.tv_sec = 0;
+    timerVal.it_value.tv_usec = 100000;
+    timerVal.it_interval.tv_sec = 0;
+    timerVal.it_interval.tv_usec = 100000;
+
+    ret = setitimer(ITIMER_REAL, &timerVal, NULL);
+    if (ret < 0) {
+        perror("Failed to set timer");
+        exit(1);
+    }
+}
+
+void stopRefresh() {
+    int ret;
+    struct sigaction sa;
+    struct itimerval timerVal;
+
+    sa.sa_handler = handler;
+    sa.sa_flags = SA_NODEFER;
+    ret = sigaction(SIGALRM, &sa, NULL);
+    if (ret < 0) {
+        perror("Failed to set sigaction");
+        exit(1);
+    }
+
+    timerVal.it_value.tv_sec = 0;
+    timerVal.it_value.tv_usec = 0;
+    timerVal.it_interval.tv_sec = 0;
+    timerVal.it_interval.tv_usec = 0;
+
+    ret = setitimer(ITIMER_REAL, &timerVal, NULL);
+    if (ret < 0) {
+        perror("Failed to set timer");
+        exit(1);
+    }
+}
+
+void handleGameStart() {
+    int ret;
     sendGameStartMessage();
     sendMap();
+
+    ret = pthread_create(&moveSetterThread, NULL, setIncomingMoves, NULL);
+    if (ret != 0) {
+        perror("Failed to create moveSetterThread");
+        exit(1);
+    }
+
+    startRefresh();
+}
+
+void startGame() {
+    int ret;
+    gameStarted = 1;
+
+    ret = pthread_create(&moveResolverThread, NULL, handleGameStart, NULL);
+    if (ret != 0) {
+        fprintf(stderr, "Failed to create moveResolverThread");
+        perror("");
+        exit(1);
+    }
 }
 
 int main() {
     struct ServerCfg serverCfg;
     struct sockaddr_in serverAddress;
     int netSocket;
+
+    srand(time(NULL)); // Initialization for setting players random positions later. Should only be called once.
 
     getCfg(&serverCfg);
     loadMap(&serverCfg);
