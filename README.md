@@ -6,7 +6,7 @@
 
 
 ## Client
-You have to have ncurses library installed on you machine to be able to compile the client. If you don't have it then you can install it by running `sudo apt-get install libncurses5-dev libncursesw5-dev`
+You have to have *ncurses* library installed on you machine to be able to compile the client. If you don't have it then you can install it by running `sudo apt-get install libncurses5-dev libncursesw5-dev`.
 
 To compile the client run *cmp_mazerunner.sh* shellscript by executing `sh cmp_mazerunner.sh` command.
 
