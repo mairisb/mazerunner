@@ -2,3 +2,5 @@
 !**/.gitignore
 **/a.out
 **/*.cfg
+
+client/mazerunner

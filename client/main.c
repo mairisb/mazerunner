@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <curses.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <stdio.h>
