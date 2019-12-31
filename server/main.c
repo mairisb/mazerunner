@@ -8,12 +8,14 @@
 #include <string.h>
 #include <errno.h>
 
-#define MAP_WIDTH 122
-#define MAP_HEIGHT 21
+#include "servercfg.h"
+#include "utility.h"
 
 #define TYPE_SIZE 1
 #define USERNAME_SIZE 16
 #define MAX_PLAYER_COUNT 8
+#define MAX_MAP_HEIGHT 999
+#define MAX_MAP_WIDTH 999
 #define MAP_HEIGHT_SIZE 3
 #define MAP_WIDTH_SIZE 3
 
@@ -35,23 +37,56 @@
 #define JOIN_GAME_MSG_SIZE (TYPE_SIZE + USERNAME_SIZE + 1)
 #define LOBBY_INFO_MSG_SIZE (TYPE_SIZE + 1 + MAX_PLAYER_COUNT * USERNAME_SIZE + 1)
 #define GAME_START_MSG_SIZE (TYPE_SIZE + 1 + MAX_PLAYER_COUNT * USERNAME_SIZE + MAP_HEIGHT_SIZE + MAP_WIDTH_SIZE + 1)
-#define MAP_MSG_SIZE (TYPE_SIZE + 3 + MAP_WIDTH + 1)
+#define MAP_MSG_SIZE (TYPE_SIZE + MAP_WIDTH_SIZE + MAX_MAP_WIDTH + 1)
 
+int mapWidth = 0;
+int mapHeight = 0;
+char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 2];
 int players[MAX_PLAYER_COUNT];
 char usernames[MAX_PLAYER_COUNT][USERNAME_SIZE + 1];
 int connectedPlayerCount = 0;
 int gameStarted = 0;
 
-void printBytes(char *buff, int size) {
+void printMap(struct ServerCfg *serverCfg) {
     int i;
-    for (i = 0; i < size; i++) {
-        if (buff[i] == '\0') {
-            printf("\\0");
-        } else {
-            printf("%c", buff[i]);
-        }
+    for (i = 0; i < mapHeight; i++) {
+        printf("%s\n", mapState[i]);
     }
-    printf("\n");
+}
+
+void loadMap(struct ServerCfg *serverCfg) {
+    int i;
+    FILE *mapFile = NULL;
+
+    mapFile = fopen(serverCfg->mapFile, "r");
+    if (mapFile == NULL) {
+        printf("Could not open map file '%s'", serverCfg->mapFile);
+        perror("");
+        exit(1);
+    }
+
+    for (i = 0; i < MAX_MAP_HEIGHT; i++) {
+        int rowLength;
+        if (getLine(mapState[i], sizeof(mapState[i]), mapFile) == NULL) {
+            if (mapWidth == 0) {
+                printf("A map can not be empty\n");
+                exit(1);
+            }
+            mapHeight = i;
+            break;
+        }
+
+        rowLength = strlen(mapState[i]);
+        if (mapWidth == 0) {
+            mapWidth = rowLength;
+        } else if (rowLength != mapWidth) {
+            printf("A map can not contain different width rows\n");
+            exit(1);
+        }
+
+    }
+
+    printMap(serverCfg);
 }
 
 int usernameTaken(char *username) {
@@ -198,7 +233,7 @@ void sendGameStartMessage() {
 
     actualSize += addUsernames(&gameStartMessage[2]);
 
-    sprintf(&gameStartMessage[actualSize], "%d%d", MAP_WIDTH, MAP_HEIGHT);
+    sprintf(&gameStartMessage[actualSize], "%03d%03d", mapWidth, mapHeight);
     actualSize += MAP_WIDTH_SIZE + MAP_HEIGHT_SIZE;
 
     sendToAll(gameStartMessage, actualSize);
@@ -206,10 +241,10 @@ void sendGameStartMessage() {
 
 void sendMap() {
     int i;
-    int actualSize = MAP_MSG_SIZE - 1;
-    for (i = 0; i < MAP_HEIGHT; i++) {
+    int actualSize = TYPE_SIZE + MAP_WIDTH_SIZE + mapWidth;
+    for (i = 0; i < mapHeight; i++) {
         char mapMessage[MAP_MSG_SIZE] = "";
-        sprintf(mapMessage, "%s%05d%s", S_MAP_ROW, i + 1, "***");
+        sprintf(mapMessage, "%s%03d%s", S_MAP_ROW, i + 1, mapState[i]);
         sendToAll(mapMessage, actualSize);
     }
 }
@@ -221,11 +256,17 @@ void startGame() {
 }
 
 int main() {
-    int netSocket = socket(AF_INET, SOCK_STREAM, 0);
-
+    struct ServerCfg serverCfg;
     struct sockaddr_in serverAddress;
+    int netSocket;
+
+    getCfg(&serverCfg);
+    loadMap(&serverCfg);
+
+    netSocket = socket(AF_INET, SOCK_STREAM, 0);
+
     serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(7443);
+    serverAddress.sin_port = htons(serverCfg.serverPort);
     serverAddress.sin_addr.s_addr = INADDR_ANY;
 
     bind(netSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
