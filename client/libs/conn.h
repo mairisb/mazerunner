@@ -18,8 +18,8 @@ int netSock;
 
 char getMsgType(char *);
 void sockCreate();
-void sockConn(char *, int);
-void sockCreateConn(char *, int);
+int sockConn(char *, int);
+int sockCreateConn(char *, int);
 int sockSend(char*);
 int sockRecv(char*, short);
 int sockSendJoinGame(char *);

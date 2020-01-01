@@ -42,6 +42,16 @@ void displayUnamePrompt() {
     refresh();
 }
 
+void displayConnError() {
+    char displayTxt1[] = "Connection Failure";
+    char displayTxt2[] = "<Press any button to try connecting again>";
+    erase();
+    mvprintw(maxY / 2, (maxX - strlen(displayTxt1)) / 2, "%s", displayTxt1);
+    mvprintw(maxY / 2 + 1, (maxX - strlen(displayTxt2)) / 2, "%s", displayTxt2);
+    refresh();
+    getch();
+}
+
 void displayGameInProgress() {
     char displayTxt1[] = "Game already in progress";
     char displayTxt2[] = "<Press any button to join again>";

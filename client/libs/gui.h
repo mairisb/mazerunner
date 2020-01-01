@@ -9,6 +9,7 @@ void endGui();
 void displayStr(char *, ...);
 void displayTitle();
 void displayUnamePrompt();
+void displayConnError();
 void displayGameInProgress();
 void displayUnameTaken();
 void displayLobbyInfo(int, char [MAX_PLAYER_CNT][MAX_UNAME_SIZE + 1]);

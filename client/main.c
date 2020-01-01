@@ -28,17 +28,25 @@ int main(int argc, char** argv) {
     char buff[BUFF_SIZE];
     enum MsgType msgType;
     char displayTxt[DISPLAY_TXT_MAX_SIZE];
+    int connRes;
 
     getCfg(); /* read and set client configuration */
     initGui(); /* start curses mode */
 
     displayTitle();
 
-
     displayUnamePrompt();
     getUname(uname, sizeof(uname));
 
-    sockCreateConn(cfg.serverIp, cfg.serverPort); /* connect to the server */
+    /* Connect to the server */
+    do {
+        displayStr("Connecting to server...");
+        sleep(1);
+        connRes = sockCreateConn(cfg.serverIp, cfg.serverPort);
+        if (connRes < 0) {
+            displayConnError();
+        }
+    } while (connRes < 0);
 
     do { /* Join game */
         if (msgType == GAME_IN_PROGRESS) {
