@@ -10,17 +10,22 @@ int isComment(char *line) {
     return line[0] == '#';
 }
 
-void parseSetting(struct ClientCfg *clientCfg, char *key, char *val) {
+void printClientCfg() {
+    printf("Client's configuration:\n");
+    printf("\t%s = %s\n", SETTING_SERVER_IP, cfg.serverIp);
+    printf("\t%s = %d\n", SETTING_SERVER_PORT, cfg.serverPort);
+}
+
+void parseSetting(char *key, char *val) {
     if (strcmp(key, SETTING_SERVER_IP) == 0) {
-        strcpy(clientCfg->serverIp, val);
+        memset(cfg.serverIp, 0, 16);
+        strcpy(cfg.serverIp, val);
     } else if (strcmp(key, SETTING_SERVER_PORT) == 0) {
-        sscanf(val, "%d", &clientCfg->serverPort);
-    } else if (strcmp(key, SETTING_SCREEN_HEIGHT) == 0) {
-        sscanf(val, "%d", &clientCfg->screenHeight);
+        sscanf(val, "%d", &cfg.serverPort);
     }
 }
 
-void setCfg(struct ClientCfg *clientCfg) {
+void getCfg() {
     char line[MAX_CFG_LINE_SIZE];
     char key[MAX_CFG_LINE_SIZE];
     char val[MAX_CFG_LINE_SIZE];
@@ -37,14 +42,11 @@ void setCfg(struct ClientCfg *clientCfg) {
     while (getLine(line, MAX_CFG_LINE_SIZE, file) != NULL) {
         if (strlen(line) > 0 && !isComment(line)) {
             sscanf(line, "%s = %s", key, val);
-            parseSetting(clientCfg, key, val);
+            parseSetting(key, val);
         }
     }
 
-    printf("Client's configuration:\n");
-    printf("\t%s = %s\n", SETTING_SERVER_IP, clientCfg->serverIp);
-    printf("\t%s = %d\n", SETTING_SERVER_PORT, clientCfg->serverPort);
-    printf("\t%s = %d\n", SETTING_SCREEN_HEIGHT, clientCfg->screenHeight);
+    printClientCfg();
 
     fclose(file);
 }

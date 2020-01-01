@@ -14,11 +14,14 @@ enum MsgType {
     GAME_END = '9'
 };
 
+int netSock;
+
 char getMsgType(char *);
-int sockCreate();
-void sockConn(int, char *, int);
-int sockSend(int, char*);
-int sockRecv(int, char*, short);
-int sockSendJoinGame(int, char *);
+void sockCreate();
+void sockConn(char *, int);
+void sockCreateConn(char *, int);
+int sockSend(char*);
+int sockRecv(char*, short);
+int sockSendJoinGame(char *);
 
 #endif /* CONN_H */

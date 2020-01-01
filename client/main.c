@@ -13,35 +13,38 @@
 #define BUFF_SIZE 1024
 #define MAX_PLAYER_CNT 8
 
+struct LobbyInfo {
+    int playerCnt;
+    char players[MAX_PLAYER_CNT][MAX_UNAME_SIZE + 1];
+};
+
+void getLobbyInfo(char *msgLobbyInfo);
+
+struct LobbyInfo lobbyInfo;
+
 int main(int argc, char** argv) {
-    struct ClientCfg clientCfg;
-    int netSock;
     char uname[MAX_UNAME_SIZE + 1];
     char buff[BUFF_SIZE];
     enum MsgType msgType;
-    int playerCnt;
-    char players[MAX_PLAYER_CNT][MAX_UNAME_SIZE + 1];
-    memset(players, 0, sizeof(players[0][0]) * MAX_PLAYER_CNT * (MAX_UNAME_SIZE + 1));
 
     /* Read and set client configuration */
-    setCfg(&clientCfg);
+    getCfg();
 
-    /* Create and connect socket to server */
-    netSock = sockCreate();
-    sockConn(netSock, clientCfg.serverIp, clientCfg.serverPort);
+    /* Connect to the server */
+    sockCreateConn(cfg.serverIp, cfg.serverPort);
 
     printf("Enter username: ");
     getLine(uname, sizeof(uname), stdin);
 
-    do {
+    do { /* Join game */
         if (msgType == GAME_IN_PROGRESS) {
             sleep(3);
         }
 
         printf("Attempting to join game...\n");
-        sockSendJoinGame(netSock, uname);
+        sockSendJoinGame(uname);
 
-        sockRecv(netSock, buff, sizeof(buff));
+        sockRecv(buff, sizeof(buff));
 
         msgType = getMsgType(buff);
         switch(msgType) {
@@ -62,28 +65,15 @@ int main(int argc, char** argv) {
         }
     } while (msgType != LOBBY_INFO);
 
-    do {
-        playerCnt = buff[1] - '0';
+    do { /* Wait for other players and the game to start */
+        getLobbyInfo(buff);
 
-        int i, j, k;
-        for (i = 0, j = 0, k = 2; i < playerCnt; k++) {
-            if (buff[k] == '\0' || j == 16) {
-                i++;
-                j = 0;
-                continue;
-            }
-            players[i][j] = buff[k];
-            j++;
-        }
-        for (int i = 0; i < (clientCfg.screenHeight - playerCnt - 1); i++) {
-            printf("\n");
-        }
-        printf("Players: %d/%d\n", playerCnt, MAX_PLAYER_CNT);
-        for (int i = 0; i < playerCnt; i++) {
-            printf("%s\n", players[i]);
+        printf("Players: %d/%d\n", lobbyInfo.playerCnt, MAX_PLAYER_CNT);
+        for (int i = 0; i < lobbyInfo.playerCnt; i++) {
+            printf("%s\n", lobbyInfo.players[i]);
         }
 
-        sockRecv(netSock, buff, sizeof(buff));
+        sockRecv(buff, sizeof(buff));
 
         if (getMsgType(buff) != LOBBY_INFO && getMsgType(buff) != GAME_START) {
             printf("Error: received unexpected message\n");
@@ -96,4 +86,22 @@ int main(int argc, char** argv) {
     close(netSock);
 
     return 0;
+}
+
+void getLobbyInfo(char *msgLobbyInfo) {
+    /* Get player count */
+    lobbyInfo.playerCnt = msgLobbyInfo[1] - '0';
+
+    /* Get players' usernames */
+    memset(lobbyInfo.players, 0, sizeof(lobbyInfo.players[0][0]) * MAX_PLAYER_CNT * (MAX_UNAME_SIZE + 1));
+    int i, j, k;
+    for (i = 0, j = 0, k = 2; i < lobbyInfo.playerCnt; k++) {
+        if (msgLobbyInfo[k] == '\0' || j == 16) {
+            i++;
+            j = 0;
+            continue;
+        }
+        lobbyInfo.players[i][j] = msgLobbyInfo[k];
+        j++;
+    }
 }

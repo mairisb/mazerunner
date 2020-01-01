@@ -13,10 +13,11 @@
 struct ClientCfg {
     char serverIp[16];
     int serverPort;
-    int screenHeight;
 };
 
-void setCfg(struct ClientCfg *);
+struct ClientCfg cfg;
+
+void getCfg();
 char *getLine(char *, int, FILE *);
 
 #endif /* CLIENT_CFG_H */
