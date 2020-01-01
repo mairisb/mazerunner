@@ -17,6 +17,10 @@ TODO:
 
 ## Server
 
-TODO:
+
+
+---
+
+### TODO
 * Start game after timeout
 * Implement validation of map file contents
