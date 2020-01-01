@@ -24,12 +24,12 @@ void sockConn(char *ip, int port) {
     remote.sin_addr.s_addr = inet_addr(ip);
     remote.sin_family = AF_INET;
     remote.sin_port = htons(port);
-    printf("Attempting to connect to the server...\n");
+    // printf("Attempting to connect to the server...\n");
     if (connect(netSock, (struct sockaddr *) &remote, sizeof(struct sockaddr_in)) < 0) {
         perror("Error connecting to server");
         exit(1);
     }
-    printf("Connection established!\n");
+    // printf("Connection established!\n");
 }
 
 void sockCreateConn(char *ip, int port) {

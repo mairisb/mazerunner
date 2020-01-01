@@ -1,6 +1,13 @@
 #ifndef GUI_H
 #define GUI_H
 
-void printTitle(int row, int col);
+void initGui();
+void endGui();
+void displayStr(char *, ...);
+void displayTitle();
+void getUname(char *, int);
+
+int row;
+int col;
 
 #endif /* GUI_H */
