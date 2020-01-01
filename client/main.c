@@ -34,10 +34,8 @@ int main(int argc, char** argv) {
 
     displayTitle();
 
-    erase();
-    strcpy(displayTxt, "Enter username: ");
-    mvprintw(row / 2, (col - strlen(displayTxt) - sizeof(uname)) / 2, "%s", displayTxt);
-    refresh();
+
+    displayUnamePrompt();
     getUname(uname, sizeof(uname));
 
     sockCreateConn(cfg.serverIp, cfg.serverPort); /* connect to the server */
@@ -60,21 +58,10 @@ int main(int argc, char** argv) {
                 sleep(1);
                 break;
             case GAME_IN_PROGRESS:
-                erase();
-                strcpy(displayTxt, "Game already in progress.");
-                mvprintw(row / 2, (col - strlen(displayTxt)) / 2, "%s", displayTxt);
-                strcpy(displayTxt, "<Press any button to join again>");
-                mvprintw(row / 2 + 1, (col - strlen(displayTxt)) / 2, "%s", displayTxt);
-                refresh();
-                getch();
+                displayGameInProgress();
                 break;
             case USERNAME_TAKEN:
-                erase();
-                strcpy(displayTxt, "Username already taken");
-                mvprintw(row / 2, (col - strlen(displayTxt)) / 2, "%s", displayTxt);
-                strcpy(displayTxt, "Enter new username: ");
-                mvprintw(row / 2 + 2, (col - strlen(displayTxt) - sizeof(uname)) / 2, "%s", displayTxt);
-                refresh();
+                displayUnameTaken();
                 getUname(uname, sizeof(uname));
                 break;
             default:
@@ -86,15 +73,7 @@ int main(int argc, char** argv) {
 
     do { /* Wait for other players and the game to start */
         getLobbyInfo(buff);
-
-        erase();
-        sprintf(displayTxt, "Players: %d/%d\n", lobbyInfo.playerCnt, MAX_PLAYER_CNT);
-        mvprintw(row / 2, (col - strlen(displayTxt)) / 2, "%s", displayTxt);
-        for (int i = 0; i < lobbyInfo.playerCnt; i++) {
-            mvprintw(row / 2 + 2 + i, (col - strlen(lobbyInfo.players[i]) - sizeof(uname)) / 2, "%s", lobbyInfo.players[i]);
-            // printf("%s\n", lobbyInfo.players[i]);
-        }
-        refresh();
+        displayLobbyInfo(lobbyInfo.playerCnt, lobbyInfo.players);
 
         sockRecv(buff, sizeof(buff));
 
@@ -105,6 +84,8 @@ int main(int argc, char** argv) {
             exit(1);
         }
     } while (getMsgType(buff) != GAME_START);
+
+    /* Handle GAME_START, map and GAME_UPDATE */
 
     endGui();
     close(netSock);

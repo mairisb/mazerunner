@@ -8,7 +8,7 @@
 
 void initGui() {
     initscr();
-    getmaxyx(stdscr, row, col);
+    getmaxyx(stdscr, maxY, maxX);
     curs_set(0);
 }
 
@@ -16,22 +16,57 @@ void endGui() {
     endwin();
 }
 
+void displayStr(char *msg, ...) {
+    erase();
+    mvprintw(maxY / 2, (maxX - strlen(msg)) / 2, "%s", msg);
+    refresh();
+}
+
 void displayTitle() {
     erase();
-    mvprintw((row / 2) - 2, (col - 63) / 2, "    __  ___");
-    mvprintw((row / 2) - 1, (col - 63) / 2, "   /  |/  /___ _____  ___     _______  ______  ____  ___  _____");
-    mvprintw((row / 2), (col - 63) / 2, "  / /|_/ / __ `/_  / / _ \\   / ___/ / / / __ \\/ __ \\/ _ \\/ ___/");
-    mvprintw((row / 2) + 1, (col - 63) / 2, " / /  / / /_/ / / /_/  __/  / /  / /_/ / / / / / / /  __/ /");
-    mvprintw((row / 2) + 2, (col - 63) / 2, "/_/  /_/\\__,_/ /___/\\___/  /_/   \\__,_/_/ /_/_/ /_/\\___/_/");
-    mvprintw((row / 2) + 4, (col - 18) / 2, "<Press any button>");
-    move(row, col);
+    mvprintw((maxY / 2) - 2, (maxX - 63) / 2, "    __  ___");
+    mvprintw((maxY / 2) - 1, (maxX - 63) / 2, "   /  |/  /___ _____  ___     _______  ______  ____  ___  _____");
+    mvprintw((maxY / 2), (maxX - 63) / 2, "  / /|_/ / __ `/_  / / _ \\   / ___/ / / / __ \\/ __ \\/ _ \\/ ___/");
+    mvprintw((maxY / 2) + 1, (maxX - 63) / 2, " / /  / / /_/ / / /_/  __/  / /  / /_/ / / / / / / /  __/ /");
+    mvprintw((maxY / 2) + 2, (maxX - 63) / 2, "/_/  /_/\\__,_/ /___/\\___/  /_/   \\__,_/_/ /_/_/ /_/\\___/_/");
+    mvprintw((maxY / 2) + 4, (maxX - 18) / 2, "<Press any button>");
+    move(maxY, maxX);
     refresh();
     getch();
 }
 
-void displayStr(char *msg, ...) {
+void displayUnamePrompt() {
     erase();
-    mvprintw(row / 2, (col - strlen(msg)) / 2, "%s", msg);
+    char displayTxt[] = "Enter username: ";
+    mvprintw(maxY / 2, (maxX - strlen(displayTxt) - MAX_UNAME_SIZE) / 2, "%s", displayTxt);
+    refresh();
+}
+
+void displayGameInProgress() {
+    char displayTxt1[] = "Game already in progress";
+    char displayTxt2[] = "<Press any button to join again>";
+    erase();
+    mvprintw(maxY / 2, (maxX - strlen(displayTxt1)) / 2, "%s", displayTxt1);
+    mvprintw(maxY / 2 + 1, (maxX - strlen(displayTxt2)) / 2, "%s", displayTxt2);
+    refresh();
+    getch();
+}
+
+void displayUnameTaken() {
+    char displayTxt1[] = "Username already taken";
+    char displayTxt2[] = "Enter new username: ";
+    erase();
+    mvprintw(maxY / 2, (maxX - strlen(displayTxt1)) / 2, "%s", displayTxt1);
+    mvprintw(maxY / 2 + 2, (maxX - strlen(displayTxt2) - MAX_UNAME_SIZE) / 2, "%s", displayTxt2);
+    refresh();
+}
+
+void displayLobbyInfo(int playerCnt, char players[MAX_PLAYER_CNT][MAX_UNAME_SIZE + 1]) {
+    erase();
+    mvprintw(maxY / 2, (maxX - 12) / 2, "Players: %d/%d\n", playerCnt, MAX_PLAYER_CNT);
+    for (int i = 0; i < playerCnt; i++) {
+        mvprintw(maxY / 2 + 2 + i, (maxX - 16) / 2, "%s", players[i]);
+    }
     refresh();
 }
 
