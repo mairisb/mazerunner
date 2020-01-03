@@ -141,8 +141,6 @@ void resetPlayer(int socket) {
         if (players[i] == socket) {
             players[i] = 0;
             usernames[i][0] = '\0';
-            rowPositions[i] = 0;
-            columnPositions[i] = 0;
             return;
         }
     }
