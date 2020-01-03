@@ -1,4 +1,5 @@
-#deifne _POSIX_SOURCE
+#define _XOPEN_SOURCE 500
+#define _POSIX_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,9 +13,10 @@
 #include <pthread.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <unistd.h>
 
-#include "servercfg.h"
-#include "utility.h"
+#include "libs/servercfg.h"
+#include "libs/utility.h"
 
 #define TYPE_SIZE 1
 #define USERNAME_SIZE 16
@@ -59,7 +61,7 @@ int gameStarted = 0;
 pthread_t moveResolverThread;
 pthread_t moveSetterThread;
 
-void printMap(struct ServerCfg *serverCfg) {
+void printMap() {
     int i;
     for (i = 0; i < mapHeight; i++) {
         printf("%s\n", mapState[i]);
@@ -78,14 +80,15 @@ void checkAndSetSpawnPosition(char *mapRow, int rowLength, int rowPosition) {
     }
 }
 
-void loadMap(struct ServerCfg *serverCfg) {
+void loadMap() {
     int i;
     FILE *mapFile = NULL;
 
-    mapFile = fopen(serverCfg->mapFile, "r");
+    mapFile = fopen(cfg.mapFilename, "r");
     if (mapFile == NULL) {
-        fprintf(stderr, "Could not open map file '%s'", serverCfg->mapFile);
+        fprintf(stderr, "Could not open map file '%s'", cfg.mapFilename);
         perror("");
+        fclose(mapFile);
         exit(1);
     }
 
@@ -94,6 +97,7 @@ void loadMap(struct ServerCfg *serverCfg) {
         if (getLine(mapState[i], sizeof(mapState[i]), mapFile) == NULL) {
             if (mapWidth == 0) {
                 printf("A map can not be empty\n");
+                fclose(mapFile);
                 exit(1);
             }
             mapHeight = i + 1;
@@ -105,13 +109,15 @@ void loadMap(struct ServerCfg *serverCfg) {
             mapWidth = rowLength;
         } else if (rowLength != mapWidth) {
             printf("A map can not contain different width rows\n");
+            fclose(mapFile);
             exit(1);
         }
 
         checkAndSetSpawnPosition(mapState[i], rowLength, i);
     }
 
-    printMap(serverCfg);
+    fclose(mapFile);
+    printMap();
 }
 
 int usernameTaken(char *username) {
@@ -202,18 +208,19 @@ int addUsernames(char *buff) {
 
 int getRandomFreePosition() {
     int freePositions[MAX_PLAYER_COUNT];
-    size_t freePositionCount;
+    int freePositionCount = 0;
     int randomPosition;
     int lastIndex = 0;
     int i;
-    for (i = 0; i < players; i++) {
+
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
         if (players[i] == 0) {
             freePositions[lastIndex] = i;
             lastIndex++;
+            freePositionCount++;
         }
     }
 
-    freePositionCount = MAX_PLAYER_COUNT - sizeof(freePositions) / sizeof(freePositions[0]);
     if (freePositionCount == 0) {
         return -1;
     }
@@ -296,65 +303,21 @@ void sendMap() {
     }
 }
 
-void setIncomingMoves() {
+void *setIncomingMoves(void *args) {
     printf("Not implemented yet\n");
+
+    return NULL;
 }
 
 void resolveIncomingMoves() {
-    printf("Not implemented yet\n");
-}
-
-void startRefresh() {
-    int ret;
-    struct sigaction sa;
-    struct itimerval timerVal;
-
-    sa.sa_handler = resolveIncomingMoves();
-    sa.sa_flags = SA_NODEFER; //| SA_RESETHAND;
-    ret = sigaction(SIGALRM, &sa, NULL);
-    if (ret < 0) {
-        perror("Failed to set sigaction");
-        exit(1);
-    }
-
-    timerVal.it_value.tv_sec = 0;
-    timerVal.it_value.tv_usec = 100000;
-    timerVal.it_interval.tv_sec = 0;
-    timerVal.it_interval.tv_usec = 100000;
-
-    ret = setitimer(ITIMER_REAL, &timerVal, NULL);
-    if (ret < 0) {
-        perror("Failed to set timer");
-        exit(1);
+    while(1) {
+        usleep(100000);
+        printf("Resolving moves\n");
+        printf("Not implemented yet\n");
     }
 }
 
-void stopRefresh() {
-    int ret;
-    struct sigaction sa;
-    struct itimerval timerVal;
-
-    sa.sa_handler = handler;
-    sa.sa_flags = SA_NODEFER;
-    ret = sigaction(SIGALRM, &sa, NULL);
-    if (ret < 0) {
-        perror("Failed to set sigaction");
-        exit(1);
-    }
-
-    timerVal.it_value.tv_sec = 0;
-    timerVal.it_value.tv_usec = 0;
-    timerVal.it_interval.tv_sec = 0;
-    timerVal.it_interval.tv_usec = 0;
-
-    ret = setitimer(ITIMER_REAL, &timerVal, NULL);
-    if (ret < 0) {
-        perror("Failed to set timer");
-        exit(1);
-    }
-}
-
-void handleGameStart() {
+void *handleGameStart(void *args) {
     int ret;
     sendGameStartMessage();
     sendMap();
@@ -365,7 +328,8 @@ void handleGameStart() {
         exit(1);
     }
 
-    startRefresh();
+    resolveIncomingMoves();
+    return NULL;
 }
 
 void startGame() {
@@ -381,19 +345,18 @@ void startGame() {
 }
 
 int main() {
-    struct ServerCfg serverCfg;
     struct sockaddr_in serverAddress;
     int netSocket;
 
-    srand(time(NULL)); // Initialization for setting players random positions later. Should only be called once.
+    srand(time(NULL)); /* Initialization for setting players random positions later. Should only be called once. */
 
-    getCfg(&serverCfg);
-    loadMap(&serverCfg);
+    loadCfg();
+    loadMap();
 
     netSocket = socket(AF_INET, SOCK_STREAM, 0);
 
     serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(serverCfg.serverPort);
+    serverAddress.sin_port = htons(cfg.serverPort);
     serverAddress.sin_addr.s_addr = INADDR_ANY;
 
     bind(netSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
