@@ -37,6 +37,13 @@ int main(int argc, char** argv) {
     int lastPlayerInfoByte;
     char mapRowsStr[3], mapColsStr[3];
     int mapRows, mapCols;
+    char rowNumStr[3];
+    int rowNum;
+
+    /* Make sure map rows are null terminated */
+    for (int i = 0; i < MAX_MAP_HEIGHT; i++) {
+        memset(mapState[i], 0, MAX_MAP_WIDTH+1);
+    }
 
     getCfg(); /* read and set client configuration */
     initGui(); /* start curses mode */
@@ -112,48 +119,19 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
+    /* Receive map */
+    for (int i = 0; i < mapRows; i++) {
+        sockRecv(buff, sizeof(buff));
+        strncpy(rowNumStr, buff+lastPlayerInfoByte, 3);
+        rowNum = getCoordsFromStr(rowNumStr);
+        strncpy(mapState[rowNum], buff+4, mapCols);
+        mapState[rowNum][mapCols] = '\0';
+    }
+
+    displayMap(mapRows, mapCols, mapState);
+    getch();
+
     endGui();
-
-    printBytes(buff, mapCols+4);
-    sockRecv(buff, sizeof(buff));
-    printBytes(buff, mapCols+4);
-    sockRecv(buff, sizeof(buff));
-    printBytes(buff, mapCols+4);
-    sockRecv(buff, sizeof(buff));
-    printBytes(buff, mapCols+4);
-    sockRecv(buff, sizeof(buff));
-    printBytes(buff, mapCols+4);
-    sockRecv(buff, sizeof(buff));
-    printBytes(buff, mapCols+4);
-    sockRecv(buff, sizeof(buff));
-    printBytes(buff, mapCols+4);
-    sockRecv(buff, sizeof(buff));
-    printBytes(buff, mapCols+4);
-    sockRecv(buff, sizeof(buff));
-    printBytes(buff, mapCols+4);
-    sockRecv(buff, sizeof(buff));
-    printBytes(buff, mapCols+4);
-    sockRecv(buff, sizeof(buff));
-    printBytes(buff, mapCols+4);
-
-    // /* Receive map */
-    // for (int i = 0; i < mapRows; i++) {
-    //     sockRecv(buff, sizeof(buff));
-    //     msgType = getMsgType(buff);
-    //     if (msgType != MAP_ROW) {
-    //         endGui();
-    //         printf("Error: received unexpected message\n");
-    //         printBytes(buff, sizeof(buff));
-    //         exit(1);
-    //     }
-    //     strncpy(mapState[i], buff+4, mapCols);
-    //     mapState[i][mapCols] = '\0';
-    // }
-
-    // displayMap(mapRows, mapCols, mapState);
-    // getch();
-
-    // endGui();
     close(netSock);
 
     return 0;
