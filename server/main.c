@@ -63,6 +63,8 @@ pthread_t moveSetterThread;
 
 void printMap() {
     int i;
+    printf("Map height: %d\n", mapHeight);
+    printf("Map width: %d\n", mapWidth);
     for (i = 0; i < mapHeight; i++) {
         printf("%s\n", mapState[i]);
     }
@@ -100,7 +102,7 @@ void loadMap() {
                 fclose(mapFile);
                 exit(1);
             }
-            mapHeight = i + 1;
+            mapHeight = i;
             break;
         }
 
@@ -139,8 +141,6 @@ void resetPlayer(int socket) {
         if (players[i] == socket) {
             players[i] = 0;
             usernames[i][0] = '\0';
-            rowPositions[i] = 0;
-            columnPositions[i] = 0;
             return;
         }
     }
@@ -296,6 +296,9 @@ void sendGameStartMessage() {
 void sendMap() {
     int i;
     int actualSize = TYPE_SIZE + MAP_WIDTH_SIZE + mapWidth;
+
+    printf("Row 0: %s\n", mapState[0]);
+
     for (i = 0; i < mapHeight; i++) {
         char mapMessage[MAP_MSG_SIZE] = "";
         sprintf(mapMessage, "%s%03d%s", S_MAP_ROW, i + 1, mapState[i]);
