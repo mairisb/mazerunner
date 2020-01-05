@@ -101,7 +101,6 @@ int main(int argc, char** argv) {
 
     /* Start game */
     if (msgType == GAME_START) {
-        endGui();
         lastPlayerInfoByte = getPlayerInfo(buff);
         strncpy(mapColsStr, buff+lastPlayerInfoByte, 3);
         strncpy(mapRowsStr, buff+lastPlayerInfoByte+3, 3);
@@ -113,23 +112,49 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    for (int i = 0; i < mapRows; i++) {
-        sockRecv(buff, sizeof(buff));
-        msgType = getMsgType(buff);
-        if (msgType != MAP_ROW) {
-            endGui();
-            printf("Error: received unexpected message\n");
-            exit(1);
-        }
-        strncpy(mapState[i], buff+4, mapCols);
-        mapState[i][mapCols] = '\0';
-    }
+    endGui();
 
+    printBytes(buff, mapCols+4);
+    sockRecv(buff, sizeof(buff));
+    printBytes(buff, mapCols+4);
+    sockRecv(buff, sizeof(buff));
+    printBytes(buff, mapCols+4);
+    sockRecv(buff, sizeof(buff));
+    printBytes(buff, mapCols+4);
+    sockRecv(buff, sizeof(buff));
+    printBytes(buff, mapCols+4);
+    sockRecv(buff, sizeof(buff));
+    printBytes(buff, mapCols+4);
+    sockRecv(buff, sizeof(buff));
+    printBytes(buff, mapCols+4);
+    sockRecv(buff, sizeof(buff));
+    printBytes(buff, mapCols+4);
+    sockRecv(buff, sizeof(buff));
+    printBytes(buff, mapCols+4);
+    sockRecv(buff, sizeof(buff));
+    printBytes(buff, mapCols+4);
+    sockRecv(buff, sizeof(buff));
+    printBytes(buff, mapCols+4);
+
+    // /* Receive map */
+    // for (int i = 0; i < mapRows; i++) {
+    //     sockRecv(buff, sizeof(buff));
+    //     msgType = getMsgType(buff);
+    //     if (msgType != MAP_ROW) {
+    //         endGui();
+    //         printf("Error: received unexpected message\n");
+    //         printBytes(buff, sizeof(buff));
+    //         exit(1);
+    //     }
+    //     strncpy(mapState[i], buff+4, mapCols);
+    //     mapState[i][mapCols] = '\0';
+    // }
+
+    // displayMap(mapRows, mapCols, mapState);
+    // getch();
+
+    // endGui();
     close(netSock);
-
-    for (int i = 0; i < mapRows; i++) {
-        printf("%s\n", mapState[i]);
-    }
 
     return 0;
 }
@@ -150,7 +175,7 @@ int getPlayerInfo(char *msg) {
         playerInfo.players[i][j] = msg[k];
         j++;
     }
-    return k; /* last playerInfo byte */
+    return k; /* index of last buff byte read */
 }
 
 int getCoordsFromStr(char *str) {

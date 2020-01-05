@@ -81,6 +81,15 @@ void displayLobbyInfo(int playerCnt, char players[MAX_PLAYER_CNT][MAX_UNAME_SIZE
     refresh();
 }
 
+void displayMap(int mapRows, int mapCols, char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1]) {
+    erase();
+    for (int i = 0; i < mapRows; i++) {
+        printf("%s\n", mapState[i]);
+        mvprintw((maxY - (mapRows/2) + i) / 2, (maxX - mapCols) / 2, mapState[i]);
+    }
+    refresh();
+}
+
 void getUname(char *uname, int unameSize) {
     char c;
     int i;
@@ -107,7 +116,7 @@ void getUname(char *uname, int unameSize) {
             i--;
         }
         refresh();
-    } while (c != '\n');
+    } while (c != '\n' && strlen(uname) != 0);
 
     attroff(A_BOLD);
     keypad(stdscr, FALSE);

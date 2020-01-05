@@ -37,7 +37,8 @@ int sockSend(char* req) {
 }
 
 int sockRecv(char* buff, short buffSize) {
-    strcpy(buff, "");
+    // strcpy(buff, "");
+    memset(buff, 0, buffSize);
     return recv(netSock, buff, buffSize, 0);
 }
 
