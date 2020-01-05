@@ -18,7 +18,7 @@ void endGui() {
 
 void displayStr(char *msg, ...) {
     erase();
-    mvprintw(maxY / 2, (maxX - strlen(msg)) / 2, "%s", msg);
+    mvprintw(maxY / 2, (maxX - strlen(msg)) / 2, msg);
     refresh();
 }
 
@@ -38,7 +38,7 @@ void displayTitle() {
 void displayUnamePrompt() {
     erase();
     char displayTxt[] = "Enter username: ";
-    mvprintw(maxY / 2, (maxX - strlen(displayTxt) - MAX_UNAME_SIZE) / 2, "%s", displayTxt);
+    mvprintw(maxY / 2, (maxX - strlen(displayTxt) - MAX_UNAME_SIZE) / 2, displayTxt);
     refresh();
 }
 
@@ -46,8 +46,8 @@ void displayConnError() {
     char displayTxt1[] = "Connection Failure";
     char displayTxt2[] = "<Press any button to try connecting again>";
     erase();
-    mvprintw(maxY / 2, (maxX - strlen(displayTxt1)) / 2, "%s", displayTxt1);
-    mvprintw(maxY / 2 + 1, (maxX - strlen(displayTxt2)) / 2, "%s", displayTxt2);
+    mvprintw(maxY / 2, (maxX - strlen(displayTxt1)) / 2, displayTxt1);
+    mvprintw(maxY / 2 + 1, (maxX - strlen(displayTxt2)) / 2, displayTxt2);
     refresh();
     getch();
 }
@@ -56,8 +56,8 @@ void displayGameInProgress() {
     char displayTxt1[] = "Game already in progress";
     char displayTxt2[] = "<Press any button to join again>";
     erase();
-    mvprintw(maxY / 2, (maxX - strlen(displayTxt1)) / 2, "%s", displayTxt1);
-    mvprintw(maxY / 2 + 1, (maxX - strlen(displayTxt2)) / 2, "%s", displayTxt2);
+    mvprintw(maxY / 2, (maxX - strlen(displayTxt1)) / 2, displayTxt1);
+    mvprintw(maxY / 2 + 1, (maxX - strlen(displayTxt2)) / 2, displayTxt2);
     refresh();
     getch();
 }
@@ -66,16 +66,17 @@ void displayUnameTaken() {
     char displayTxt1[] = "Username already taken";
     char displayTxt2[] = "Enter new username: ";
     erase();
-    mvprintw(maxY / 2, (maxX - strlen(displayTxt1)) / 2, "%s", displayTxt1);
-    mvprintw(maxY / 2 + 2, (maxX - strlen(displayTxt2) - MAX_UNAME_SIZE) / 2, "%s", displayTxt2);
+    mvprintw(maxY / 2, (maxX - strlen(displayTxt1)) / 2, displayTxt1);
+    mvprintw(maxY / 2 + 2, (maxX - strlen(displayTxt2) - MAX_UNAME_SIZE) / 2, displayTxt2);
     refresh();
 }
 
 void displayLobbyInfo(int playerCnt, char players[MAX_PLAYER_CNT][MAX_UNAME_SIZE + 1]) {
     erase();
     mvprintw(maxY / 2, (maxX - 12) / 2, "Players: %d/%d\n", playerCnt, MAX_PLAYER_CNT);
+    mvprintw(maxY / 2 + 1, (maxX - 16) / 2, "----------------", playerCnt, MAX_PLAYER_CNT);
     for (int i = 0; i < playerCnt; i++) {
-        mvprintw(maxY / 2 + 2 + i, (maxX - 16) / 2, "%s", players[i]);
+        mvprintw(maxY / 2 + 2 + i, (maxX - 16) / 2, players[i]);
     }
     refresh();
 }

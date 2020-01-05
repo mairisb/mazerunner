@@ -29,6 +29,8 @@ void printBytes(char *buff, int size) {
     for (i = 0; i < size; i++) {
         if (buff[i] == '\0') {
             printf("\\0");
+        } else if (buff[i] == '\n') {
+            printf("\\n");
         } else {
             printf("%c", buff[i]);
         }

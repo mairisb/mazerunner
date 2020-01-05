@@ -2,6 +2,7 @@
 #define CONN_H
 
 enum MsgType {
+    NO_MESSAGE = 'N',
     JOIN_GAME = '0',
     MOVE = '1',
     LOBBY_INFO = '2',

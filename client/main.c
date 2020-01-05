@@ -13,15 +13,20 @@
 #define BUFF_SIZE 1024
 #define MAX_PLAYER_CNT 8
 #define DISPLAY_TXT_MAX_SIZE 128
+#define MAX_MAP_HEIGHT 999
+#define MAX_MAP_WIDTH 999
 
-struct LobbyInfo {
+struct PlayerInfo {
     int playerCnt;
     char players[MAX_PLAYER_CNT][MAX_UNAME_SIZE + 1];
 };
 
-void getLobbyInfo(char *msgLobbyInfo);
+int getPlayerInfo(char *);
+int getCoordsFromStr(char *);
 
-struct LobbyInfo lobbyInfo;
+struct PlayerInfo playerInfo;
+
+char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1];
 
 int main(int argc, char** argv) {
     char uname[MAX_UNAME_SIZE + 1];
@@ -29,6 +34,9 @@ int main(int argc, char** argv) {
     enum MsgType msgType;
     char displayTxt[DISPLAY_TXT_MAX_SIZE];
     int connRes;
+    int lastPlayerInfoByte;
+    char mapRowsStr[3], mapColsStr[3];
+    int mapRows, mapCols;
 
     getCfg(); /* read and set client configuration */
     initGui(); /* start curses mode */
@@ -38,8 +46,8 @@ int main(int argc, char** argv) {
     displayUnamePrompt();
     getUname(uname, sizeof(uname));
 
-    /* Connect to the server */
-    do {
+    msgType = NO_MESSAGE;
+    do { /* Connect to the server */
         displayStr("Connecting to server...");
         sleep(1);
         connRes = sockCreateConn(cfg.serverIp, cfg.serverPort);
@@ -47,6 +55,9 @@ int main(int argc, char** argv) {
             displayConnError();
         }
     } while (connRes < 0);
+
+    displayStr("Connection established");
+    sleep(1);
 
     do { /* Join game */
         if (msgType == GAME_IN_PROGRESS) {
@@ -80,41 +91,68 @@ int main(int argc, char** argv) {
     } while (msgType != LOBBY_INFO);
 
     do { /* Wait for other players and the game to start */
-        getLobbyInfo(buff);
-        displayLobbyInfo(lobbyInfo.playerCnt, lobbyInfo.players);
+        getPlayerInfo(buff);
+        displayLobbyInfo(playerInfo.playerCnt, playerInfo.players);
 
         sockRecv(buff, sizeof(buff));
 
         msgType = getMsgType(buff);
-        if (msgType != LOBBY_INFO && msgType != GAME_START) {
+    } while (msgType == LOBBY_INFO);
+
+    /* Start game */
+    if (msgType == GAME_START) {
+        endGui();
+        lastPlayerInfoByte = getPlayerInfo(buff);
+        strncpy(mapColsStr, buff+lastPlayerInfoByte, 3);
+        strncpy(mapRowsStr, buff+lastPlayerInfoByte+3, 3);
+        mapCols = getCoordsFromStr(mapColsStr);
+        mapRows = getCoordsFromStr(mapRowsStr);
+    } else {
+        endGui();
+        printf("Error: received unexpected message\n");
+        exit(1);
+    }
+
+    for (int i = 0; i < mapRows; i++) {
+        sockRecv(buff, sizeof(buff));
+        msgType = getMsgType(buff);
+        if (msgType != MAP_ROW) {
             endGui();
             printf("Error: received unexpected message\n");
             exit(1);
         }
-    } while (getMsgType(buff) != GAME_START);
+        strncpy(mapState[i], buff+4, mapCols);
+        mapState[i][mapCols] = '\0';
+    }
 
-    /* Handle GAME_START, map and GAME_UPDATE */
-
-    endGui();
     close(netSock);
+
+    for (int i = 0; i < mapRows; i++) {
+        printf("%s\n", mapState[i]);
+    }
 
     return 0;
 }
 
-void getLobbyInfo(char *msgLobbyInfo) {
+int getPlayerInfo(char *msg) {
     /* Get player count */
-    lobbyInfo.playerCnt = msgLobbyInfo[1] - '0';
+    playerInfo.playerCnt = msg[1] - '0';
 
     /* Get players' usernames */
-    memset(lobbyInfo.players, 0, sizeof(lobbyInfo.players[0][0]) * MAX_PLAYER_CNT * (MAX_UNAME_SIZE + 1));
+    memset(playerInfo.players, 0, sizeof(playerInfo.players[0][0]) * MAX_PLAYER_CNT * (MAX_UNAME_SIZE + 1));
     int i, j, k;
-    for (i = 0, j = 0, k = 2; i < lobbyInfo.playerCnt; k++) {
-        if (msgLobbyInfo[k] == '\0' || j == 16) {
+    for (i = 0, j = 0, k = 2; i < playerInfo.playerCnt; k++) {
+        if (msg[k] == '\0' || j == 16) {
             i++;
             j = 0;
             continue;
         }
-        lobbyInfo.players[i][j] = msgLobbyInfo[k];
+        playerInfo.players[i][j] = msg[k];
         j++;
     }
+    return k; /* last playerInfo byte */
+}
+
+int getCoordsFromStr(char *str) {
+    return (str[0]-'0') * 100 + (str[1]-'0') * 10 + (str[2]-'0');
 }
