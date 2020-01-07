@@ -51,8 +51,8 @@ int netSocket;
 int connectedPlayerCount = 0;
 int players[MAX_PLAYER_COUNT];
 char usernames[MAX_PLAYER_COUNT][USERNAME_SIZE + 1];
-int rowPositions[MAX_PLAYER_COUNT];
-int columnPositions[MAX_PLAYER_COUNT];
+int startRowPositions[MAX_PLAYER_COUNT];
+int startColumnPositions[MAX_PLAYER_COUNT];
 
 int mapWidth = 0;
 int mapHeight = 0;
@@ -90,8 +90,9 @@ void checkAndSetSpawnPosition(char *mapRow, int rowLength, int rowPosition) {
         int cellValue = (int) mapRow[i];
         if (cellValue >= 65 && cellValue <= 72) {
             int index = cellValue - 65;
-            rowPositions[index] = rowPosition;
-            columnPositions[index] = i;
+            startRowPositions[index] = rowPosition;
+            startColumnPositions[index] = i;
+            mapRow[i] = ' ';
         }
     }
 }
