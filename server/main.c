@@ -47,12 +47,23 @@
 #define MAP_MSG_SIZE (TYPE_SIZE + MAP_WIDTH_SIZE + MAX_MAP_WIDTH + 1)
 #define MOVE_MSG_SIZE (TYPE_SIZE + MOVE_SIZE + 1)
 
+struct Position {
+    int rowPosition;
+    int columnPosition;
+};
+
+struct Move {
+    int playerIndex;
+    int moveNum;
+};
+
 int netSocket;
+
 int connectedPlayerCount = 0;
 int players[MAX_PLAYER_COUNT];
 char usernames[MAX_PLAYER_COUNT][USERNAME_SIZE + 1];
-int startRowPositions[MAX_PLAYER_COUNT];
-int startColumnPositions[MAX_PLAYER_COUNT];
+struct Position startPositions[MAX_PLAYER_COUNT];
+struct Position positions[MAX_PLAYER_COUNT];
 
 int mapWidth = 0;
 int mapHeight = 0;
@@ -90,8 +101,8 @@ void checkAndSetSpawnPosition(char *mapRow, int rowLength, int rowPosition) {
         int cellValue = (int) mapRow[i];
         if (cellValue >= 65 && cellValue <= 72) {
             int index = cellValue - 65;
-            startRowPositions[index] = rowPosition;
-            startColumnPositions[index] = i;
+            startPositions[index].rowPosition = rowPosition;
+            startPositions[index].columnPosition = i;
             mapRow[i] = ' ';
         }
     }
@@ -357,6 +368,12 @@ void resolveIncomingMoves() {
 
 void *handleGameStart(void *args) {
     int ret;
+
+    int i;
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        positions[i].rowPosition = startPositions[i].rowPosition;
+        positions[i].columnPosition = startPositions[i].columnPosition;
+    }
     sendGameStartMessage();
     sendMap();
 
