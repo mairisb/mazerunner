@@ -47,6 +47,7 @@
 #define MAP_MSG_SIZE (TYPE_SIZE + MAP_WIDTH_SIZE + MAX_MAP_WIDTH + 1)
 #define MOVE_MSG_SIZE (TYPE_SIZE + MOVE_SIZE + 1)
 
+int netSocket;
 int connectedPlayerCount = 0;
 int players[MAX_PLAYER_COUNT];
 char usernames[MAX_PLAYER_COUNT][USERNAME_SIZE + 1];
@@ -60,6 +61,19 @@ char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 2];
 int gameStarted = 0;
 pthread_t moveResolverThread;
 pthread_t moveSetterThread;
+
+void exitHandler(int sig) {
+    int i;
+    printf("Entered exit handler\n");
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        if (players[i] != 0) {
+            close(players[i]);
+        }
+    }
+    close(netSocket);
+
+    exit(sig);
+}
 
 void printMap() {
     int i;
@@ -91,7 +105,7 @@ void loadMap() {
         fprintf(stderr, "Could not open map file '%s'", cfg.mapFilename);
         perror("");
         fclose(mapFile);
-        exit(1);
+        exitHandler(1);
     }
 
     for (i = 0; i < MAX_MAP_HEIGHT; i++) {
@@ -100,7 +114,7 @@ void loadMap() {
             if (mapWidth == 0) {
                 printf("A map can not be empty\n");
                 fclose(mapFile);
-                exit(1);
+                exitHandler(1);
             }
             mapHeight = i;
             break;
@@ -112,7 +126,7 @@ void loadMap() {
         } else if (rowLength != mapWidth) {
             printf("A map can not contain different width rows\n");
             fclose(mapFile);
-            exit(1);
+            exitHandler(1);
         }
 
         checkAndSetSpawnPosition(mapState[i], rowLength, i);
@@ -144,25 +158,47 @@ void resetPlayer(int socket) {
             return;
         }
     }
+
+    close(socket);
 }
 
 int socketSend(int socket, char *message, int messageSize) {
-    int ret = send(socket, message, messageSize, MSG_NOSIGNAL);
-    if (ret < 0) {
-        printf("Client disconnected, removing player\n");
-        resetPlayer(socket);
-        errno = 0;
+    int sentBytes = 0;
+    int ret;
+    while (sentBytes < messageSize) {
+        ret = send(socket, message, messageSize, MSG_NOSIGNAL);
+        if (ret <= 0) {
+            printf("Client disconnected, removing player\n");
+            resetPlayer(socket);
+            errno = 0;
+        } else {
+            sentBytes += ret;
+            printf("Sent %d bytes\n", ret);
+        }
     }
-    else {
-        printf("Message sent ");
-        printBytes(message, messageSize);
-    }
+    printf("Message sent ");
+    printBytes(message, messageSize);
 
     return ret;
 }
 
-int socketReceive(int socket, char *message, short messageSize) {
-    int ret = recv(socket, message, messageSize, 0);
+int socketReceive(int socket, char *message, int messageSize) {
+    int receivedBytes = 0;
+    int ret;
+    while (receivedBytes < messageSize) {
+        ret = recv(socket, message, messageSize, 0);
+        if (ret < 0) {
+            printf("Client disconnected, removing player\n");
+            resetPlayer(socket);
+            errno = 0;
+        } else if (ret == 0) {
+            printf("Message was shorter than passed size\n");
+            break;
+        } else {
+            receivedBytes += ret;
+            printf("Received %d bytes\n", ret);
+        }
+    }
     printf("Message received %s\n", message);
     return ret;
 }
@@ -297,8 +333,6 @@ void sendMap() {
     int i;
     int actualSize = TYPE_SIZE + MAP_WIDTH_SIZE + mapWidth;
 
-    printf("Row 0: %s\n", mapState[0]);
-
     for (i = 0; i < mapHeight; i++) {
         char mapMessage[MAP_MSG_SIZE] = "";
         sprintf(mapMessage, "%s%03d%s", S_MAP_ROW, i + 1, mapState[i]);
@@ -328,7 +362,7 @@ void *handleGameStart(void *args) {
     ret = pthread_create(&moveSetterThread, NULL, setIncomingMoves, NULL);
     if (ret != 0) {
         perror("Failed to create moveSetterThread");
-        exit(1);
+        exitHandler(1);
     }
 
     resolveIncomingMoves();
@@ -343,13 +377,18 @@ void startGame() {
     if (ret != 0) {
         fprintf(stderr, "Failed to create moveResolverThread");
         perror("");
-        exit(1);
+        exitHandler(1);
     }
 }
 
 int main() {
     struct sockaddr_in serverAddress;
-    int netSocket;
+
+    struct sigaction sigIntHandler;
+    sigIntHandler.sa_handler = exitHandler;
+    sigemptyset(&sigIntHandler.sa_mask);
+    sigIntHandler.sa_flags = 0;
+    sigaction(SIGINT, &sigIntHandler, NULL);
 
     srand(time(NULL)); /* Initialization for setting players random positions later. Should only be called once. */
 
@@ -379,8 +418,11 @@ int main() {
             }
         } else {
             respondWithError(clientSocket, retErrorType);
+            close(clientSocket);
         }
     }
+
+    close(netSocket);
 
     return 0;
 }
