@@ -372,7 +372,7 @@ void readAndSetMove(int playerIndex) {
     int moveType;
     struct PlayerData *player = &players[playerIndex];
 
-    socketReceive(player->socket, moveRequest, sizeof(moveRequest));
+    socketReceive(player->socket, moveRequest, sizeof(moveRequest) - 1);
     if (strlen(moveRequest) != 2) {
         printf("Request is not in the correct length\n");
         printf("Ignoring player move\n");
