@@ -82,6 +82,31 @@ pthread_t moveResolverThread;
 pthread_t moveSetterThread;
 pthread_mutex_t lock;
 
+void exitHandler(int sig);
+void resetPlayer(int socket);
+int socketSend(int socket, char *message, int messageSize);
+int socketReceive(int socket, char *buff, int messageSize);
+void sendToAll(char *message, int size);
+void respondWithError(int clientSocket, char *errorType);
+int addUsernames(char *buff);
+void sendLobbyInfoMessage();
+void sendGameStartMessage();
+void sendMap();
+int addFoodData(char *buff);
+int addPositionsAndPoints(char *buff);
+void sendGameUpdateMessage();
+void resolveIncomingMoves();
+void readAndSetMove(int playerIndex);
+void *setIncomingMoves(void *args); /* Thread function */
+void *handleGameStart(void *args); /* Thread function */
+void startGame();
+int usernameTaken(char *username);
+int getRandomFreePosition();
+char *addClientToGame(int clientSocket);
+void checkAndSetSpawnPosition(char *mapRow, int rowLength, int rowPosition);
+void printMap();
+void loadMap();
+
 void exitHandler(int sig) {
     int i;
     printf("Entered exit handler\n");
@@ -95,81 +120,6 @@ void exitHandler(int sig) {
     pthread_mutex_destroy(&lock);
 
     exit(sig);
-}
-
-void printMap() {
-    int i;
-    printf("Map height: %d\n", mapHeight);
-    printf("Map width: %d\n", mapWidth);
-    for (i = 0; i < mapHeight; i++) {
-        printf("%s\n", mapState[i]);
-    }
-}
-
-void checkAndSetSpawnPosition(char *mapRow, int rowLength, int rowPosition) {
-    int i;
-    for (i = 0; i < rowLength; i++) {
-        int cellValue = (int) mapRow[i];
-        if (cellValue >= 65 && cellValue <= 72) {
-            int index = cellValue - 65;
-            startPositions[index].rowPosition = rowPosition;
-            startPositions[index].columnPosition = i;
-            mapRow[i] = ' ';
-        }
-    }
-}
-
-void loadMap() {
-    int i;
-    FILE *mapFile = NULL;
-
-    mapFile = fopen(cfg.mapFilename, "r");
-    if (mapFile == NULL) {
-        fprintf(stderr, "Could not open map file '%s'", cfg.mapFilename);
-        perror("");
-        fclose(mapFile);
-        exitHandler(1);
-    }
-
-    for (i = 0; i < MAX_MAP_HEIGHT; i++) {
-        int rowLength;
-        if (getLine(mapState[i], sizeof(mapState[i]), mapFile) == NULL) {
-            if (mapWidth == 0) {
-                printf("A map can not be empty\n");
-                fclose(mapFile);
-                exitHandler(1);
-            }
-            mapHeight = i;
-            break;
-        }
-
-        rowLength = strlen(mapState[i]);
-        if (mapWidth == 0) {
-            mapWidth = rowLength;
-        } else if (rowLength != mapWidth) {
-            printf("A map can not contain different width rows\n");
-            fclose(mapFile);
-            exitHandler(1);
-        }
-
-        checkAndSetSpawnPosition(mapState[i], rowLength, i);
-    }
-
-    fclose(mapFile);
-    printMap();
-}
-
-int usernameTaken(char *username) {
-    int i;
-    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-        if (players[i].socket != 0) {
-            if (strcmp(username, players[i].username) == 0) {
-                return 1;
-            }
-        }
-    }
-
-    return 0;
 }
 
 void resetPlayer(int socket) {
@@ -212,12 +162,12 @@ int socketSend(int socket, char *message, int messageSize) {
     return 0;
 }
 
-int socketReceive(int socket, char *message, int messageSize) {
+int socketReceive(int socket, char *buff, int messageSize) {
     int recBytes = 0;
     int recTotal = 0;
 
     while (recTotal < messageSize) {
-        recBytes = recv(socket, &message[recTotal], messageSize - recTotal, 0);
+        recBytes = recv(socket, &buff[recTotal], messageSize - recTotal, 0);
         if (recBytes < 0) {
             perror("Error reading socket: ");
             printf("Removing player\n");
@@ -233,13 +183,8 @@ int socketReceive(int socket, char *message, int messageSize) {
         }
     }
 
-    printf("Message received %s\n", message);
+    printf("Message received %s\n", buff);
     return 0;
-}
-
-void respondWithError(int clientSocket, char *errorType) {
-    socketSend(clientSocket, errorType, sizeof(errorType));
-    close(clientSocket);
 }
 
 void sendToAll(char *message, int size) {
@@ -250,6 +195,11 @@ void sendToAll(char *message, int size) {
         }
         socketSend(players[i].socket, message, size);
     }
+}
+
+void respondWithError(int clientSocket, char *errorType) {
+    socketSend(clientSocket, errorType, sizeof(errorType));
+    close(clientSocket);
 }
 
 int addUsernames(char *buff) {
@@ -267,72 +217,6 @@ int addUsernames(char *buff) {
     }
 
     return size;
-}
-
-int getRandomFreePosition() {
-    int freePositions[MAX_PLAYER_COUNT];
-    int freePositionCount = 0;
-    int randomPosition;
-    int lastIndex = 0;
-    int i;
-
-    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-        if (players[i].socket == 0) {
-            freePositions[lastIndex] = i;
-            lastIndex++;
-            freePositionCount++;
-        }
-    }
-
-    if (freePositionCount == 0) {
-        return -1;
-    }
-
-    randomPosition = rand() % freePositionCount;
-    return freePositions[randomPosition];
-}
-
-char *addClientToGame(int clientSocket) {
-    char joinGameRequest[JOIN_GAME_MSG_SIZE] = "";
-    char requestType;
-
-    int playerPosition = getRandomFreePosition();
-    if (playerPosition < 0) {
-        printf("Cannot add player to game - game full\n");
-        return E_GAME_IN_PROGRESS;
-    }
-
-    printf("a\n");
-    socketReceive(clientSocket, joinGameRequest, sizeof(joinGameRequest) - 1);
-    printf("b\n");
-
-    if (strlen(joinGameRequest) < 2) {
-        printf("Request is not in the correct format\n");
-        respondWithError(clientSocket, E_TECHNICAL);
-        printf("Cannot add player to game - incorrect join game request size\n");
-        return E_TECHNICAL;
-    }
-
-    requestType = joinGameRequest[0];
-
-    if (requestType != R_JOIN_GAME) {
-        printf("Expected request type %c but was %c\n", R_JOIN_GAME, requestType);
-        respondWithError(clientSocket, E_TECHNICAL);
-        printf("Cannot add player to game - incorrect join game request type\n");
-        return E_TECHNICAL;
-    }
-
-    if (usernameTaken(&joinGameRequest[1])) {
-        printf("Cannot add player to game - username taken\n");
-        return E_USERNAME_TAKEN;
-    }
-
-    strcpy(players[playerPosition].username, &joinGameRequest[1]);
-    players[playerPosition].socket = clientSocket;
-    connectedPlayerCount++;
-
-    printf("Player successfully added to game\n");
-    return NULL;
 }
 
 void sendLobbyInfoMessage() {
@@ -364,78 +248,6 @@ void sendMap() {
         sprintf(mapMessage, "%c%03d%s", S_MAP_ROW, i + 1, mapState[i]);
         sendToAll(mapMessage, actualSize);
     }
-}
-
-void readAndSetMove(int playerIndex) {
-    char moveRequest[MOVE_MSG_SIZE] = "";
-    char requestType;
-    int moveType;
-    struct PlayerData *player = &players[playerIndex];
-
-    socketReceive(player->socket, moveRequest, sizeof(moveRequest) - 1);
-    if (strlen(moveRequest) != 2) {
-        printf("Request is not in the correct length\n");
-        printf("Ignoring player move\n");
-        respondWithError(player->socket, E_TECHNICAL);
-        return;
-    }
-
-    requestType = moveRequest[0];
-    moveType = ((int) moveRequest[1]) - 64;
-
-    if (requestType != R_MOVE) {
-        printf("Request type %c was not expected\n", requestType);
-        printf("Ignoring player move\n");
-        respondWithError(player->socket, E_TECHNICAL);
-        return;
-    }
-
-    pthread_mutex_lock(&lock);
-
-    if (moveType >= 0 && moveType < 4) {
-        player->requestedMove = moveType;
-    } else {
-        printf("Requested move is not defined\n");
-        printf("Ignoring player move\n");
-        respondWithError(player->socket, E_TECHNICAL);
-    }
-
-    pthread_mutex_unlock(&lock);
-}
-
-void *setIncomingMoves(void *args) {
-    struct pollfd pollList[MAX_PLAYER_COUNT];
-    int ret;
-    int i;
-
-    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-        pollList[i].fd = players[i].socket;
-        pollList[i].events = POLLIN;
-    }
-
-    while(1) {
-        ret = poll(pollList, MAX_PLAYER_COUNT, -1);
-
-        if(ret < 0) {
-            fprintf(stderr,"Error while polling: %s\n", strerror(errno));
-            return NULL;
-        }
-
-        /*if (((pollList[0].revents & POLLHUP) == POLLHUP) || ((pollList[0].revents&POLLERR) == POLLERR) ||
-           ((pollList[0].revents&POLLNVAL) == POLLNVAL) || ((pollList[1].revents&POLLHUP) == POLLHUP) ||
-           ((pollList[1].revents&POLLERR) == POLLERR) || ((pollList[1].revents&POLLNVAL) == POLLNVAL)) {
-
-            return 0;
-        }*/
-
-        for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-            if ((pollList[i].revents & POLLIN) == POLLIN) {
-                readAndSetMove(i);
-            }
-        }
-    }
-
-    return NULL;
 }
 
 int addFoodData(char *buff) {
@@ -536,6 +348,78 @@ void resolveIncomingMoves() {
     }
 }
 
+void readAndSetMove(int playerIndex) {
+    char moveRequest[MOVE_MSG_SIZE] = "";
+    char requestType;
+    int moveType;
+    struct PlayerData *player = &players[playerIndex];
+
+    socketReceive(player->socket, moveRequest, sizeof(moveRequest) - 1);
+    if (strlen(moveRequest) != 2) {
+        printf("Request is not in the correct length\n");
+        printf("Ignoring player move\n");
+        respondWithError(player->socket, E_TECHNICAL);
+        return;
+    }
+
+    requestType = moveRequest[0];
+    moveType = ((int) moveRequest[1]) - 64;
+
+    if (requestType != R_MOVE) {
+        printf("Request type %c was not expected\n", requestType);
+        printf("Ignoring player move\n");
+        respondWithError(player->socket, E_TECHNICAL);
+        return;
+    }
+
+    pthread_mutex_lock(&lock);
+
+    if (moveType >= 0 && moveType < 4) {
+        player->requestedMove = moveType;
+    } else {
+        printf("Requested move is not defined\n");
+        printf("Ignoring player move\n");
+        respondWithError(player->socket, E_TECHNICAL);
+    }
+
+    pthread_mutex_unlock(&lock);
+}
+
+void *setIncomingMoves(void *args) {
+    struct pollfd pollList[MAX_PLAYER_COUNT];
+    int ret;
+    int i;
+
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        pollList[i].fd = players[i].socket;
+        pollList[i].events = POLLIN;
+    }
+
+    while(1) {
+        ret = poll(pollList, MAX_PLAYER_COUNT, -1);
+
+        if(ret < 0) {
+            fprintf(stderr,"Error while polling: %s\n", strerror(errno));
+            return NULL;
+        }
+
+        /*if (((pollList[0].revents & POLLHUP) == POLLHUP) || ((pollList[0].revents&POLLERR) == POLLERR) ||
+           ((pollList[0].revents&POLLNVAL) == POLLNVAL) || ((pollList[1].revents&POLLHUP) == POLLHUP) ||
+           ((pollList[1].revents&POLLERR) == POLLERR) || ((pollList[1].revents&POLLNVAL) == POLLNVAL)) {
+
+            return 0;
+        }*/
+
+        for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+            if ((pollList[i].revents & POLLIN) == POLLIN) {
+                readAndSetMove(i);
+            }
+        }
+    }
+
+    return NULL;
+}
+
 void *handleGameStart(void *args) {
     int ret;
     int i;
@@ -569,6 +453,145 @@ void startGame() {
         perror("");
         exitHandler(1);
     }
+}
+
+int usernameTaken(char *username) {
+    int i;
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        if (players[i].socket != 0) {
+            if (strcmp(username, players[i].username) == 0) {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+int getRandomFreePosition() {
+    int freePositions[MAX_PLAYER_COUNT];
+    int freePositionCount = 0;
+    int randomPosition;
+    int lastIndex = 0;
+    int i;
+
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        if (players[i].socket == 0) {
+            freePositions[lastIndex] = i;
+            lastIndex++;
+            freePositionCount++;
+        }
+    }
+
+    if (freePositionCount == 0) {
+        return -1;
+    }
+
+    randomPosition = rand() % freePositionCount;
+    return freePositions[randomPosition];
+}
+
+char *addClientToGame(int clientSocket) {
+    char joinGameRequest[JOIN_GAME_MSG_SIZE] = "";
+    char requestType;
+
+    int playerPosition = getRandomFreePosition();
+    if (playerPosition < 0) {
+        printf("Cannot add player to game - game full\n");
+        return E_GAME_IN_PROGRESS;
+    }
+
+    socketReceive(clientSocket, joinGameRequest, sizeof(joinGameRequest) - 1);
+
+    if (strlen(joinGameRequest) < 2) {
+        printf("Request is not in the correct format\n");
+        respondWithError(clientSocket, E_TECHNICAL);
+        printf("Cannot add player to game - incorrect join game request size\n");
+        return E_TECHNICAL;
+    }
+
+    requestType = joinGameRequest[0];
+
+    if (requestType != R_JOIN_GAME) {
+        printf("Expected request type %c but was %c\n", R_JOIN_GAME, requestType);
+        respondWithError(clientSocket, E_TECHNICAL);
+        printf("Cannot add player to game - incorrect join game request type\n");
+        return E_TECHNICAL;
+    }
+
+    if (usernameTaken(&joinGameRequest[1])) {
+        printf("Cannot add player to game - username taken\n");
+        return E_USERNAME_TAKEN;
+    }
+
+    strcpy(players[playerPosition].username, &joinGameRequest[1]);
+    players[playerPosition].socket = clientSocket;
+    connectedPlayerCount++;
+
+    printf("Player successfully added to game\n");
+    return NULL;
+}
+
+void checkAndSetSpawnPosition(char *mapRow, int rowLength, int rowPosition) {
+    int i;
+    for (i = 0; i < rowLength; i++) {
+        int cellValue = (int) mapRow[i];
+        if (cellValue >= 65 && cellValue <= 72) {
+            int index = cellValue - 65;
+            startPositions[index].rowPosition = rowPosition;
+            startPositions[index].columnPosition = i;
+            mapRow[i] = ' ';
+        }
+    }
+}
+
+void printMap() {
+    int i;
+    printf("Map height: %d\n", mapHeight);
+    printf("Map width: %d\n", mapWidth);
+    for (i = 0; i < mapHeight; i++) {
+        printf("%s\n", mapState[i]);
+    }
+}
+
+void loadMap() {
+    int i;
+    FILE *mapFile = NULL;
+
+    mapFile = fopen(cfg.mapFilename, "r");
+    if (mapFile == NULL) {
+        fprintf(stderr, "Could not open map file '%s'", cfg.mapFilename);
+        perror("");
+        fclose(mapFile);
+        exitHandler(1);
+    }
+
+    for (i = 0; i < MAX_MAP_HEIGHT; i++) {
+        int rowLength;
+        if (getLine(mapState[i], sizeof(mapState[i]), mapFile) == NULL) {
+            if (mapWidth == 0) {
+                printf("A map can not be empty\n");
+                fclose(mapFile);
+                exitHandler(1);
+            }
+            mapHeight = i;
+            break;
+        }
+
+        rowLength = strlen(mapState[i]);
+        if (mapWidth == 0) {
+            mapWidth = rowLength;
+        } else if (rowLength != mapWidth) {
+            printf("A map can not contain different width rows\n");
+            fclose(mapFile);
+            exitHandler(1);
+        }
+
+        checkAndSetSpawnPosition(mapState[i], rowLength, i);
+    }
+
+    fclose(mapFile);
+    printMap();
 }
 
 int main() {
