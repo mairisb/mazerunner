@@ -311,6 +311,7 @@ void sendGameUpdateMessage() {
 
     actualSize += sprintf(gameUpdateMessage, "%c%d", S_GAME_UPDATE, connectedPlayerCount);
     actualSize += addPositionsAndPoints(&gameUpdateMessage[actualSize]);
+    actualSize += sprintf(&gameUpdateMessage[actualSize], "%03d", foodCount);
     actualSize += addFoodData(&gameUpdateMessage[actualSize]);
 
     sendToAll(gameUpdateMessage, actualSize);
