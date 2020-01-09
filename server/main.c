@@ -21,7 +21,7 @@
 
 #define TYPE_SIZE 1
 #define USERNAME_SIZE 16
-#define MAX_PLAYER_COUNT 8
+#define MAX_PLAYER_COUNT 2
 #define PLAYER_COUNT_SIZE 1
 #define MAX_MAP_HEIGHT 999
 #define MAX_MAP_WIDTH 999
@@ -335,9 +335,18 @@ void generateFood() {
     }
 }
 
-void resolveIncomingMoves(struct ThreadArgs *threadArgs) {
+int gameEnded() {
+    return 0;
+}
+
+void resolveIncomingMoves(int *threadStatus) {
     int i;
     while(1) {
+        if (*threadStatus == THREAD_ERRORED) {
+            return;
+        }
+
+        sendGameUpdateMessage();
         usleep(100000);
         pthread_mutex_lock(&lock);
 
@@ -410,12 +419,16 @@ void resolveIncomingMoves(struct ThreadArgs *threadArgs) {
 
                 if (foodCount <= FOOD_RESPAWN_TRESHOLD) {
                     generateFood();
+                } else if (gameEnded()) {
+                    *threadStatus = THREAD_COMPLETED;
                 }
             }
         }
 
         pthread_mutex_unlock(&lock);
-        sendGameUpdateMessage();
+        if (*threadStatus == THREAD_COMPLETED) {
+            return;
+        }
     }
 }
 
@@ -460,7 +473,7 @@ void *setIncomingMoves(void *args) {
     struct pollfd pollList[MAX_PLAYER_COUNT];
     int ret;
     int i;
-    struct ThreadArgs *threadArgs = args;
+    int *threadStatus = args;
 
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
         pollList[i].fd = players[i].socket;
@@ -468,22 +481,28 @@ void *setIncomingMoves(void *args) {
     }
 
     while(1) {
-        ret = poll(pollList, MAX_PLAYER_COUNT, -1);
-
-        if(ret < 0) {
-            perror("Error while polling: ");
+        if (*threadStatus == THREAD_ERRORED || *threadStatus == THREAD_COMPLETED) {
             return NULL;
         }
 
-        /*if (((pollList[0].revents & POLLHUP) == POLLHUP) || ((pollList[0].revents&POLLERR) == POLLERR) ||
-           ((pollList[0].revents&POLLNVAL) == POLLNVAL) || ((pollList[1].revents&POLLHUP) == POLLHUP) ||
-           ((pollList[1].revents&POLLERR) == POLLERR) || ((pollList[1].revents&POLLNVAL) == POLLNVAL)) {
+        ret = poll(pollList, MAX_PLAYER_COUNT, 10);
+        if(ret < 0) {
+            perror("Error starting polling: ");
+            *threadStatus = THREAD_ERRORED;
+            return NULL;
+        } else if (ret == 0) {
+            continue;
+        }
 
-            return 0;
-        }*/
 
         for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-            if ((pollList[i].revents & POLLIN) == POLLIN) {
+            if ((pollList[i].revents & POLLHUP) == POLLHUP || (pollList[i].revents & POLLERR) == POLLERR ||
+            (pollList[i].revents & POLLNVAL) == POLLNVAL) {
+                printf("Error polling client\n");
+                handleDisconnect(pollList[i].fd);
+                pollList[i].fd = 0;
+            }
+            else if ((pollList[i].revents & POLLIN) == POLLIN) {
                 readAndSetMove(i);
             }
         }
@@ -494,22 +513,25 @@ void *setIncomingMoves(void *args) {
 
 void *handleGameStart(void *args) {
     int ret;
-    struct ThreadArgs *threadArgs = args;
+    int *threadStatus = args;
 
     sendGameStartMessage();
     sendMap();
     generateFood();
 
-    ret = pthread_create(&moveSetterThread, NULL, setIncomingMoves, threadArgs);
+    ret = pthread_create(&moveSetterThread, NULL, setIncomingMoves, threadStatus);
     if (ret != 0) {
         perror("Failed to create moveSetterThread");
+        *threadStatus = THREAD_ERRORED;
         return NULL;
     }
 
-    resolveIncomingMoves(threadArgs);
+    resolveIncomingMoves(threadStatus);
     pthread_join(moveSetterThread, NULL);
 
-    /* Reset game here */
+    if (*threadStatus == THREAD_COMPLETED) {
+        /* Reset game here */
+    }
 
     return NULL;
 }
@@ -517,14 +539,18 @@ void *handleGameStart(void *args) {
 void startGame() {
     int ret;
     gameStarted = 1;
-    struct ThreadArgs threadArgs;
-    threadArgs.resolverStatus = THREAD_RUNNING;
-    threadArgs.setterStatus = THREAD_RUNNING;
+    int threadStatus = THREAD_RUNNING;
 
-    ret = pthread_create(&moveResolverThread, NULL, handleGameStart, &threadArgs);
+    ret = pthread_create(&moveResolverThread, NULL, handleGameStart, &threadStatus);
     if (ret != 0) {
         fprintf(stderr, "Failed to create moveResolverThread");
         perror("");
+        exitHandler(1);
+    }
+
+    pthread_join(moveResolverThread, NULL);
+    if (threadStatus == THREAD_ERRORED) {
+        fprintf(stderr, "Game handling threads returned with error\n");
         exitHandler(1);
     }
 }
