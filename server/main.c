@@ -68,7 +68,6 @@ struct PlayerData {
     char username[USERNAME_SIZE + 1];
     struct Position position;
     int points;
-    int deathStatus;
     int requestedMove;
 };
 
@@ -102,7 +101,6 @@ int socketReceive(int socket, char *buff, int messageSize);
 void sendToAll(char *message, int size);
 void respondWithError(int clientSocket, char errorType);
 int addUsernames(char *buff);
-void sendLobbyInfoMessage();
 void sendGameStartMessage();
 void sendMap();
 int addFoodData(char *buff);
@@ -115,10 +113,12 @@ void *handleGameStart(void *args); /* Thread function */
 void startGame();
 int usernameTaken(char *username);
 int getRandomFreePosition();
+void sendLobbyInfoMessage();
 int addClientToGame(int clientSocket);
 void checkAndSetSpawnPositions(char *mapRow, int rowLength, int rowPosition);
 void printMap();
 void loadMap();
+void init();
 
 void exitHandler(int sig) {
     int i;
@@ -144,8 +144,12 @@ void handleDisconnect(int socket) {
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
         if (players[i].socket == socket) {
             players[i].socket = 0;
-            players[i].username[0] = '\0';
-            connectedPlayerCount--;
+            if (gameStarted == 0) {
+                connectedPlayerCount--;
+                players[i].username[0] = '\0';
+            } else {
+                players[i].requestedMove = 0;
+            }
             return;
         }
     }
@@ -236,16 +240,6 @@ int addUsernames(char *buff) {
     return size;
 }
 
-void sendLobbyInfoMessage() {
-    int actualSize = 0;
-    char lobbyInfoMessage[LOBBY_INFO_MSG_SIZE] = "";
-
-    actualSize += sprintf(lobbyInfoMessage, "%c%d", S_LOBBY_INFO, connectedPlayerCount);
-    actualSize += addUsernames(&lobbyInfoMessage[actualSize]);
-
-    sendToAll(lobbyInfoMessage, actualSize);
-}
-
 void sendGameStartMessage() {
     int actualSize = 0;
     char gameStartMessage[GAME_START_MSG_SIZE] = "";
@@ -299,7 +293,7 @@ int addPositionsAndPoints(char *buff) {
     char *ptr = buff;
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
         struct PlayerData *player = &players[i];
-        if (player->socket == 0) {
+        if (player->socket == 0 && strlen(player->username) == 0) {
             continue;
         }
 
@@ -348,69 +342,75 @@ void resolveIncomingMoves(struct ThreadArgs *threadArgs) {
         pthread_mutex_lock(&lock);
 
         for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-            char playerLetter;
+            char playerSymbol;
             struct PlayerData *player = &players[i];
             struct Position *playerPosition = &player->position;
+            char targetSymbol;
+            int targetRowModifier = 0;
+            int targetColModifier = 0;
 
             if (player->requestedMove == 0) {
                 continue;
             }
 
-            playerLetter = 65 + i;
-
+            playerSymbol = 65 + i;
             switch (player->requestedMove) {
                 case 1:
                     if (playerPosition->rowPosition != 0) {
-                        char targetSymbol = mapState[playerPosition->rowPosition - 1][playerPosition->columnPosition];
-                        if (targetSymbol == ' ') {
-                            mapState[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
-                            mapState[playerPosition->rowPosition - 1][playerPosition->columnPosition] = playerLetter;
-                            playerPosition->rowPosition -= 1;
-                        } else {
-                            printf("Tagret position is in wall, ignore\n");
-                        }
+                        targetRowModifier = -1;
                     }
                     break;
                 case 2:
                     if (playerPosition->rowPosition != mapHeight - 1) {
-                        char targetSymbol = mapState[playerPosition->rowPosition + 1][playerPosition->columnPosition];
-                        if (targetSymbol == ' ') {
-                            mapState[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
-                            mapState[playerPosition->rowPosition + 1][playerPosition->columnPosition] = playerLetter;
-                            playerPosition->rowPosition += 1;
-                        } else {
-                            printf("Tagret position is in wall, ignore\n");
-                        }
+                        targetRowModifier = 1;
                     }
                     break;
                 case 3:
                     if (playerPosition->columnPosition != mapWidth - 1) {
-                        char targetSymbol = mapState[playerPosition->rowPosition][playerPosition->columnPosition + 1];
-                        if (targetSymbol == ' ') {
-                            mapState[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
-                            mapState[playerPosition->rowPosition][playerPosition->columnPosition + 1] = playerLetter;
-                            playerPosition->columnPosition += 1;
-                        } else {
-                            printf("Tagret position is in wall, ignore\n");
-                        }
+                        targetColModifier = 1;
                     }
                     break;
                 case 4:
                     if (playerPosition->columnPosition != 0) {
-                        char targetSymbol = mapState[playerPosition->rowPosition][playerPosition->columnPosition - 1];
-                        if (targetSymbol == ' ') {
-                            mapState[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
-                            mapState[playerPosition->rowPosition][playerPosition->columnPosition - 1] = playerLetter;
-                            playerPosition->columnPosition -= 1;
-                        } else {
-                            printf("Tagret position is in wall, ignore\n");
-                        }
+                        targetColModifier = -1;
                     }
                     break;
             }
 
-            if (foodCount <= FOOD_RESPAWN_TRESHOLD) {
-                generateFood();
+            if (targetRowModifier != 0 && targetColModifier != 0) {
+                targetSymbol = mapState[playerPosition->rowPosition + targetRowModifier][playerPosition->columnPosition + targetColModifier];
+                if (targetSymbol == ' ') {
+                    mapState[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
+                    mapState[playerPosition->rowPosition + targetRowModifier][playerPosition->columnPosition + targetColModifier] = playerSymbol;
+                    playerPosition->rowPosition += targetRowModifier;
+                    playerPosition->columnPosition += targetColModifier;
+                } else if (targetSymbol == '!') {
+                    mapState[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
+                    mapState[playerPosition->rowPosition + targetRowModifier][playerPosition->columnPosition + targetColModifier] = playerSymbol;
+                    playerPosition->rowPosition += targetRowModifier;
+                    playerPosition->columnPosition += targetColModifier;
+                    player->points++;
+                } else if ((int) targetSymbol >= 65 && (int) targetSymbol <= 72) {
+                    int targetPlayerIndex = (int) targetSymbol - 65;
+                    struct PlayerData *targetPlayer = &players[targetPlayerIndex];
+                    if (targetPlayer->points > player->points) {
+                        targetPlayer->points += player->points;
+                        player->points = 0;
+                        mapState[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
+                    } else if (targetPlayer->points < player->points) {
+                        player->points += targetPlayer->points;
+                        targetPlayer->points = 0;
+                        mapState[playerPosition->rowPosition + targetRowModifier][playerPosition->columnPosition + targetColModifier] = playerSymbol;
+                    } else {
+                        printf("Player collision, both players have the same points, ignoring\n");
+                    }
+                } else {
+                    printf("Tagret position is in wall, ignoring\n");
+                }
+
+                if (foodCount <= FOOD_RESPAWN_TRESHOLD) {
+                    generateFood();
+                }
             }
         }
 
@@ -494,14 +494,7 @@ void *setIncomingMoves(void *args) {
 
 void *handleGameStart(void *args) {
     int ret;
-    int i;
     struct ThreadArgs *threadArgs = args;
-
-    /* Set the initial positions for all players */
-    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-        players[i].position.rowPosition = startPositions[i].rowPosition;
-        players[i].position.columnPosition = startPositions[i].columnPosition;
-    }
 
     sendGameStartMessage();
     sendMap();
@@ -520,7 +513,6 @@ void *handleGameStart(void *args) {
 
     return NULL;
 }
-
 
 void startGame() {
     int ret;
@@ -571,6 +563,16 @@ int getRandomFreePosition() {
 
     randomPosition = rand() % freePositionCount;
     return freePositions[randomPosition];
+}
+
+void sendLobbyInfoMessage() {
+    int actualSize = 0;
+    char lobbyInfoMessage[LOBBY_INFO_MSG_SIZE] = "";
+
+    actualSize += sprintf(lobbyInfoMessage, "%c%d", S_LOBBY_INFO, connectedPlayerCount);
+    actualSize += addUsernames(&lobbyInfoMessage[actualSize]);
+
+    sendToAll(lobbyInfoMessage, actualSize);
 }
 
 int addClientToGame(int clientSocket) {
@@ -636,7 +638,9 @@ void checkAndSetSpawnPositions(char *mapRow, int rowLength, int rowPosition) {
             int index = cellValue - 65;
             startPositions[index].rowPosition = rowPosition;
             startPositions[index].columnPosition = i;
-            /* mapRow[i] = ' '; */
+            players[index].position.rowPosition = rowPosition;
+            players[index].position.columnPosition = i;
+            players[index].points = 1; /* Move this down later */
         }
     }
 }
@@ -689,7 +693,7 @@ void loadMap() {
     printMap();
 }
 
-int main() {
+void init() {
     int enable = 1;
     struct sockaddr_in serverAddress;
     struct sigaction sigIntHandler;
@@ -739,6 +743,10 @@ int main() {
         exitHandler(1);
     }
     printf("Listening...\n");
+}
+
+int main() {
+    init();
 
     /* Main connection accepting loop */
     while (1) {
