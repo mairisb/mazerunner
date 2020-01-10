@@ -15,9 +15,11 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <poll.h>
+#include <sys/queue.h>
 
 #include "libs/servercfg.h"
 #include "libs/utility.h"
+#include "libs/move_queue.h"
 
 #define TYPE_SIZE 1
 #define USERNAME_SIZE 16
@@ -30,9 +32,9 @@
 #define X_COORD_SIZE 3
 #define Y_COORD_SIZE 3
 #define MOVE_SIZE 1
-#define MAX_FOOD_COUNT 20
 #define FOOD_SIZE 3
-#define FOOD_RESPAWN_TRESHOLD 5
+#define MAX_FOOD_COUNT 999
+#define POINT_SIZE 3
 
 #define R_JOIN_GAME '0'
 #define R_MOVE '1'
@@ -42,7 +44,6 @@
 #define S_GAME_UPDATE '7'
 #define S_PLAYER_DEAD '8'
 #define S_GAME_END '9'
-
 #define E_GAME_IN_PROGRESS '3'
 #define E_USERNAME_TAKEN '4'
 #define E_TECHNICAL 'A'
@@ -71,24 +72,18 @@ struct PlayerData {
     int requestedMove;
 };
 
-struct ThreadArgs {
-    int resolverStatus;
-    int setterStatus;
+struct MapData {
+    char **map;
+    int currentfoodCount;
+    struct Position *foodPositions;
+    struct Position *startPositions;
 };
 
 int netSocket;
-
-int connectedPlayerCount = 0;
-struct Position startPositions[MAX_PLAYER_COUNT];
+struct MapData mapData = {};
 struct PlayerData players[MAX_PLAYER_COUNT];
-
-int mapWidth = 0;
-int mapHeight = 0;
-char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 2];
-
+int connectedPlayerCount = 0;
 int gameStarted = 0;
-int foodCount = MAX_FOOD_COUNT;
-struct Position foodPositions[MAX_FOOD_COUNT];
 
 pthread_t moveResolverThread;
 pthread_t moveSetterThread;
@@ -100,29 +95,62 @@ int socketSend(int socket, char *message, int messageSize);
 int socketReceive(int socket, char *buff, int messageSize);
 void sendToAll(char *message, int size);
 void respondWithError(int clientSocket, char errorType);
-int addUsernames(char *buff);
-void sendGameStartMessage();
-void sendMap();
+int gameEnded();
 int addFoodData(char *buff);
 int addPositionsAndPoints(char *buff);
 void sendGameUpdateMessage();
+void generateFood();
+void resetOneFood(int targetRow, int targetCol);
 void resolveIncomingMoves();
 void readAndSetMove(int playerIndex);
 void *setIncomingMoves(void *args); /* Thread function */
 void *handleGameStart(void *args); /* Thread function */
+void sendMap();
+int addUsernames(char *buff);
+void sendGameStartMessage();
 void startGame();
 int usernameTaken(char *username);
 int getRandomFreePosition();
 void sendLobbyInfoMessage();
 int addClientToGame(int clientSocket);
-void checkAndSetSpawnPositions(char *mapRow, int rowLength, int rowPosition);
+void loadPlayerData();
 void printMap();
-void loadMap();
+void checkAndSetSpawnPositions(char *mapRow, int rowPosition);
+void allocateMap();
+void loadMapData();
 void init();
+
+void printStartPositions() {
+    int i;
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        printf("Player %d start pos:\n", i);
+        printf("  x: %d\n", mapData.startPositions[i].columnPosition);
+        printf("  y: %d\n", mapData.startPositions[i].rowPosition);
+    }
+}
+
+void printPlayerPositions() {
+    int i;
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        printf("Player %d start pos:\n", i);
+        printf("  x: %d\n", players[i].position.columnPosition);
+        printf("  y: %d\n", players[i].position.rowPosition);
+    }
+}
+
+void printSockets() {
+    int i;
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        printf("Player %d socket:\n", i);
+        printf("  %d\n", players[i].socket);
+    }
+}
 
 void exitHandler(int sig) {
     int i;
     printf("Entered exit handler\n");
+
+    pthread_mutex_destroy(&lock);
 
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
         if (players[i].socket > 0) {
@@ -130,11 +158,27 @@ void exitHandler(int sig) {
         }
     }
 
+    freeMoveQueue();
+
     if (netSocket > 0) {
         close(netSocket);
     }
 
-    pthread_mutex_destroy(&lock);
+    /* Free map */
+    if (mapData.map != NULL) {
+        for (i = 0; i < cfg.mapHeight; i++) {
+            if (mapData.map[i] != NULL) {
+                free(mapData.map[i]);
+            }
+        }
+        free(mapData.map);
+    }
+    if (mapData.foodPositions != NULL) {
+        free(mapData.foodPositions);
+    }
+    if (mapData.startPositions != NULL) {
+        free(mapData.startPositions);
+    }
 
     exit(sig);
 }
@@ -178,8 +222,8 @@ int socketSend(int socket, char *message, int messageSize) {
         }
     }
 
-    printf("Message sent ");
-    printBytes(message, messageSize);
+    /*printf("Message sent ");
+    printBytes(message, messageSize);*/
     return 0;
 }
 
@@ -223,65 +267,23 @@ void respondWithError(int clientSocket, char errorType) {
     }
 }
 
-int addUsernames(char *buff) {
-    int size = 0;
-    char *ptr = buff;
-    int i;
-    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-        if (players[i].socket == 0) {
-            continue;
-        }
-
-        strcat(ptr, players[i].username);
-        ptr += USERNAME_SIZE;
-        size += USERNAME_SIZE;
-    }
-
-    return size;
-}
-
-void sendGameStartMessage() {
-    int actualSize = 0;
-    char gameStartMessage[GAME_START_MSG_SIZE] = "";
-
-    actualSize += sprintf(gameStartMessage, "%c%d", S_GAME_START, connectedPlayerCount);
-    actualSize += addUsernames(&gameStartMessage[actualSize]);
-    actualSize += sprintf(&gameStartMessage[actualSize], "%03d%03d", mapWidth, mapHeight);
-
-    sendToAll(gameStartMessage, actualSize);
-}
-
-void sendMap() {
-    int actualSize = 4 + mapWidth;
-    int i;
-    int j;
-    for (i = 0; i < mapHeight; i++) {
-        char mapMessage[MAP_MSG_SIZE] = "";
-        char *mapRowPtr = NULL;
-        sprintf(mapMessage, "%c%03d%s", S_MAP_ROW, i + 1, mapState[i]);
-        mapRowPtr = &mapMessage[4];
-        for (j = 0; j < mapWidth; j++) {
-            if ((int) mapRowPtr[j] >= 65 && (int) mapRowPtr[j] <= 72) {
-                mapRowPtr[j] = ' ';
-            }
-        }
-        sendToAll(mapMessage, actualSize);
-    }
+int gameEnded() {
+    return 0;
 }
 
 int addFoodData(char *buff) {
     int size = 0;
     int i;
     char *ptr = buff;
-    for (i = 0; i < MAX_FOOD_COUNT; i++) {
-        struct Position *position = &foodPositions[i];
+    for (i = 0; i < cfg.foodCount; i++) {
+        struct Position *position = &mapData.foodPositions[i];
         if (position->rowPosition == 0 && position->columnPosition == 0) {
             continue;
         }
 
         sprintf(ptr, "%03d%03d", position->columnPosition, position->rowPosition);
-        ptr += 6;
-        size +=6;
+        ptr += X_COORD_SIZE + Y_COORD_SIZE;
+        size += X_COORD_SIZE + Y_COORD_SIZE;
     }
 
     return size;
@@ -298,8 +300,8 @@ int addPositionsAndPoints(char *buff) {
         }
 
         sprintf(ptr, "%03d%03d%03d", player->position.columnPosition, player->position.rowPosition, player->points);
-        ptr += 9;
-        size += 9;
+        ptr += X_COORD_SIZE + Y_COORD_SIZE + POINT_SIZE;
+        size += X_COORD_SIZE + Y_COORD_SIZE + POINT_SIZE;
     }
 
     return size;
@@ -311,7 +313,7 @@ void sendGameUpdateMessage() {
 
     actualSize += sprintf(gameUpdateMessage, "%c%d", S_GAME_UPDATE, connectedPlayerCount);
     actualSize += addPositionsAndPoints(&gameUpdateMessage[actualSize]);
-    actualSize += sprintf(&gameUpdateMessage[actualSize], "%03d", foodCount);
+    actualSize += sprintf(&gameUpdateMessage[actualSize], "%03d", mapData.currentfoodCount);
     actualSize += addFoodData(&gameUpdateMessage[actualSize]);
 
     sendToAll(gameUpdateMessage, actualSize);
@@ -319,31 +321,46 @@ void sendGameUpdateMessage() {
 
 void generateFood() {
     int i;
-    for (i = 0; i < MAX_FOOD_COUNT; i++) {
-        struct Position *position = &foodPositions[i];
+    char **map = mapData.map;
+    for (i = 0; i < cfg.foodCount; i++) {
+        struct Position *position = &mapData.foodPositions[i];
         if (position->rowPosition == 0 && position->columnPosition == 0) {
             int randRowPos = 0;
             int randColPos = 0;
             do {
-                randRowPos = rand() % (mapHeight - 2) + 1;
-                randColPos = rand() % (mapWidth - 2) + 1;
-            } while (mapState[randRowPos][randColPos] != ' ');
+                randRowPos = rand() % (cfg.mapHeight - 2) + 1;
+                randColPos = rand() % (cfg.mapWidth - 2) + 1;
+            } while (map[randRowPos][randColPos] != ' ');
 
-            mapState[randRowPos][randColPos] = '!';
+            map[randRowPos][randColPos] = '@';
             position->rowPosition = randRowPos;
             position->columnPosition = randColPos;
         }
     }
+
+    mapData.currentfoodCount = cfg.foodCount;
 }
 
-int gameEnded() {
-    return 0;
+void resetOneFood(int targetRow, int targetCol) {
+    int i;
+    for (i = 0; i < cfg.foodCount; i++) {
+        struct Position *position = &mapData.foodPositions[i];
+        if (position->rowPosition == targetRow && position->columnPosition == targetCol) {
+            position->rowPosition = 0;
+            position->columnPosition = 0;
+            mapData.currentfoodCount--;
+            return;
+        }
+    }
 }
 
 void resolveIncomingMoves(int *threadStatus) {
-    int i;
+    char playerDeadMessage[2] = "";
+    playerDeadMessage[0] = S_PLAYER_DEAD;
+
     while(1) {
-        if (*threadStatus == THREAD_ERRORED) {
+        struct Node *moveNode = NULL;
+        if (*threadStatus == THREAD_ERRORED || *threadStatus == THREAD_COMPLETED) {
             return;
         }
 
@@ -351,66 +368,89 @@ void resolveIncomingMoves(int *threadStatus) {
         usleep(100000);
         pthread_mutex_lock(&lock);
 
-        for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        if (moveQueue->head == NULL) {
+            pthread_mutex_unlock(&lock);
+            continue;
+        }
+
+        for (moveNode = moveQueue->start; moveNode != moveQueue->head->next; moveNode = moveNode->next) {
             char playerSymbol;
-            struct PlayerData *player = &players[i];
+            int playerIndex = moveNode->data;
+            struct PlayerData *player = &players[playerIndex];
             struct Position *playerPosition = &player->position;
             char targetSymbol;
-            int targetRowModifier = 0;
-            int targetColModifier = 0;
+            int targetRow = 0;
+            int targetCol = 0;
 
             if (player->requestedMove == 0) {
                 continue;
             }
 
-            playerSymbol = 65 + i;
+            playerSymbol = 65 + playerIndex;
+            printf("Player symbol: %c\n", playerSymbol);
             switch (player->requestedMove) {
                 case 1:
+                    printf("Request to move up\n");
                     if (playerPosition->rowPosition != 0) {
-                        targetRowModifier = -1;
+                        targetRow = playerPosition->rowPosition - 1;
+                        targetCol = playerPosition->columnPosition;
                     }
                     break;
                 case 2:
-                    if (playerPosition->rowPosition != mapHeight - 1) {
-                        targetRowModifier = 1;
+                    printf("Request to move down\n");
+                    if (playerPosition->rowPosition != cfg.mapHeight - 1) {
+                        targetRow = playerPosition->rowPosition + 1;
+                        targetCol = playerPosition->columnPosition;
                     }
                     break;
                 case 3:
-                    if (playerPosition->columnPosition != mapWidth - 1) {
-                        targetColModifier = 1;
+                    printf("Request to move right\n");
+                    if (playerPosition->columnPosition != cfg.mapWidth - 1) {
+                        targetRow = playerPosition->rowPosition;
+                        targetCol = playerPosition->columnPosition + 1;
                     }
                     break;
                 case 4:
+                    printf("Request to move left\n");
                     if (playerPosition->columnPosition != 0) {
-                        targetColModifier = -1;
+                        targetRow = playerPosition->rowPosition;
+                        targetCol = playerPosition->columnPosition - 1;
                     }
                     break;
             }
 
-            if (targetRowModifier != 0 && targetColModifier != 0) {
-                targetSymbol = mapState[playerPosition->rowPosition + targetRowModifier][playerPosition->columnPosition + targetColModifier];
+            if (targetRow != 0 && targetCol != 0) {
+                char **map = mapData.map;
+                targetSymbol = map[targetRow][targetCol];
+                printf("Target symbol %c\n", targetSymbol);
                 if (targetSymbol == ' ') {
-                    mapState[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
-                    mapState[playerPosition->rowPosition + targetRowModifier][playerPosition->columnPosition + targetColModifier] = playerSymbol;
-                    playerPosition->rowPosition += targetRowModifier;
-                    playerPosition->columnPosition += targetColModifier;
-                } else if (targetSymbol == '!') {
-                    mapState[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
-                    mapState[playerPosition->rowPosition + targetRowModifier][playerPosition->columnPosition + targetColModifier] = playerSymbol;
-                    playerPosition->rowPosition += targetRowModifier;
-                    playerPosition->columnPosition += targetColModifier;
+                    map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
+                    map[targetRow][targetCol] = playerSymbol;
+                    playerPosition->rowPosition = targetRow;
+                    playerPosition->columnPosition = targetCol;
+                } else if (targetSymbol == '@') {
+                    map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
+                    map[targetRow][targetCol] = playerSymbol;
+                    playerPosition->rowPosition = targetRow;
+                    playerPosition->columnPosition = targetCol;
                     player->points++;
+                    resetOneFood(targetRow, targetCol);
                 } else if ((int) targetSymbol >= 65 && (int) targetSymbol <= 72) {
                     int targetPlayerIndex = (int) targetSymbol - 65;
                     struct PlayerData *targetPlayer = &players[targetPlayerIndex];
                     if (targetPlayer->points > player->points) {
                         targetPlayer->points += player->points;
                         player->points = 0;
-                        mapState[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
+                        socketSend(player->socket, playerDeadMessage, sizeof(S_PLAYER_DEAD));
+                        map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
                     } else if (targetPlayer->points < player->points) {
                         player->points += targetPlayer->points;
                         targetPlayer->points = 0;
-                        mapState[playerPosition->rowPosition + targetRowModifier][playerPosition->columnPosition + targetColModifier] = playerSymbol;
+                        socketSend(targetPlayer->socket, playerDeadMessage, sizeof(S_PLAYER_DEAD));
+                        map[targetRow][targetCol] = playerSymbol;
+                        map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
+                        playerPosition->rowPosition = targetRow;
+                        playerPosition->columnPosition = targetCol;
                     } else {
                         printf("Player collision, both players have the same points, ignoring\n");
                     }
@@ -418,18 +458,26 @@ void resolveIncomingMoves(int *threadStatus) {
                     printf("Tagret position is in wall, ignoring\n");
                 }
 
-                if (foodCount <= FOOD_RESPAWN_TRESHOLD) {
-                    generateFood();
-                } else if (gameEnded()) {
+                if (gameEnded()) {
                     *threadStatus = THREAD_COMPLETED;
+                    break;
+                }
+                printf("Current food count: %d\n", mapData.currentfoodCount);
+                if (mapData.currentfoodCount <= cfg.foodRespawnThreshold) {
+                    printf("Regenerating food\n");
+                    generateFood();
                 }
             }
+
+            player->requestedMove = 0;
         }
 
+        moveQueue->head = NULL;
         pthread_mutex_unlock(&lock);
         if (*threadStatus == THREAD_COMPLETED) {
             return;
         }
+        printMap();
     }
 }
 
@@ -448,7 +496,7 @@ void readAndSetMove(int playerIndex) {
     }
 
     requestType = moveRequest[0];
-    moveType = ((int) moveRequest[1]) - 64;
+    moveType = ((int) moveRequest[1]);
 
     if (requestType != R_MOVE) {
         printf("Request type %c was not expected\n", requestType);
@@ -459,12 +507,30 @@ void readAndSetMove(int playerIndex) {
 
     pthread_mutex_lock(&lock);
 
-    if (moveType >= 0 && moveType < 4) {
-        player->requestedMove = moveType;
-    } else {
-        printf("Requested move is not defined\n");
-        printf("Ignoring player move\n");
-        respondWithError(player->socket, E_TECHNICAL);
+    if (player->requestedMove == 0) {
+        switch (moveType) {
+            case 85:
+                player->requestedMove = 1;
+                addMove(playerIndex);
+                break;
+            case 68:
+                player->requestedMove = 2;
+                addMove(playerIndex);
+                break;
+            case 82:
+                player->requestedMove = 3;
+                addMove(playerIndex);
+                break;
+            case 76:
+                player->requestedMove = 4;
+                addMove(playerIndex);
+                break;
+            default:
+                printf("Requested move is not defined\n");
+                printf("Ignoring player move\n");
+                respondWithError(player->socket, E_TECHNICAL);
+                break;
+        }
     }
 
     pthread_mutex_unlock(&lock);
@@ -475,14 +541,25 @@ void *setIncomingMoves(void *args) {
     int ret;
     int i;
     int *threadStatus = args;
-
-    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-        pollList[i].fd = players[i].socket;
-        pollList[i].events = POLLIN;
-    }
+    int allClientsDisconnected;
 
     while(1) {
         if (*threadStatus == THREAD_ERRORED || *threadStatus == THREAD_COMPLETED) {
+            return NULL;
+        }
+
+        allClientsDisconnected = 1;
+
+        for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+            if (allClientsDisconnected == 1 && players[i].socket > 0) {
+                allClientsDisconnected = 0;
+            }
+            pollList[i].fd = players[i].socket;
+            pollList[i].events = POLLIN;
+        }
+
+        if (allClientsDisconnected == 1) {
+            *threadStatus = THREAD_COMPLETED;
             return NULL;
         }
 
@@ -512,6 +589,52 @@ void *setIncomingMoves(void *args) {
     return NULL;
 }
 
+void sendMap() {
+    int actualSize = 4 + cfg.mapWidth;
+    int i;
+    int j;
+    for (i = 0; i < cfg.mapHeight; i++) {
+        char mapMessage[MAP_MSG_SIZE] = "";
+        char *mapRowPtr = NULL;
+        sprintf(mapMessage, "%c%03d%s", S_MAP_ROW, i + 1, mapData.map[i]);
+        mapRowPtr = &mapMessage[4];
+        for (j = 0; j < cfg.mapWidth; j++) {
+            if ((int) mapRowPtr[j] >= 65 && (int) mapRowPtr[j] <= 72) {
+                mapRowPtr[j] = ' ';
+            }
+        }
+        sendToAll(mapMessage, actualSize);
+    }
+}
+
+int addUsernames(char *buff) {
+    int size = 0;
+    char *ptr = buff;
+    int i;
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        if (players[i].socket == 0) {
+            continue;
+        }
+
+        strcat(ptr, players[i].username);
+        ptr += USERNAME_SIZE;
+        size += USERNAME_SIZE;
+    }
+
+    return size;
+}
+
+void sendGameStartMessage() {
+    int actualSize = 0;
+    char gameStartMessage[GAME_START_MSG_SIZE] = "";
+
+    actualSize += sprintf(gameStartMessage, "%c%d", S_GAME_START, connectedPlayerCount);
+    actualSize += addUsernames(&gameStartMessage[actualSize]);
+    actualSize += sprintf(&gameStartMessage[actualSize], "%03d%03d", cfg.mapWidth, cfg.mapHeight);
+
+    sendToAll(gameStartMessage, actualSize);
+}
+
 void *handleGameStart(void *args) {
     int ret;
     int *threadStatus = args;
@@ -519,6 +642,8 @@ void *handleGameStart(void *args) {
     sendGameStartMessage();
     sendMap();
     generateFood();
+
+    printMap();
 
     ret = pthread_create(&moveSetterThread, NULL, setIncomingMoves, threadStatus);
     if (ret != 0) {
@@ -531,6 +656,8 @@ void *handleGameStart(void *args) {
     pthread_join(moveSetterThread, NULL);
 
     if (*threadStatus == THREAD_COMPLETED) {
+        printf("THREAD_COMPLETED\n");
+        /* Execute game end here */
         /* Reset game here */
     }
 
@@ -541,6 +668,8 @@ void startGame() {
     int ret;
     gameStarted = 1;
     int threadStatus = THREAD_RUNNING;
+
+    printMap();
 
     ret = pthread_create(&moveResolverThread, NULL, handleGameStart, &threadStatus);
     if (ret != 0) {
@@ -657,33 +786,76 @@ int addClientToGame(int clientSocket) {
     return 0;
 }
 
-void checkAndSetSpawnPositions(char *mapRow, int rowLength, int rowPosition) {
+void loadPlayerData() {
     int i;
-    for (i = 0; i < rowLength; i++) {
-        int cellValue = (int) mapRow[i];
-        if (cellValue >= 65 && cellValue <= 72) {
-            int index = cellValue - 65;
-            startPositions[index].rowPosition = rowPosition;
-            startPositions[index].columnPosition = i;
-            players[index].position.rowPosition = rowPosition;
-            players[index].position.columnPosition = i;
-            players[index].points = 1; /* Move this down later */
-        }
+
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        players[i].points = 1;
+        players[i].position.rowPosition = mapData.startPositions[i].rowPosition;
+        players[i].position.columnPosition = mapData.startPositions[i].columnPosition;
     }
 }
 
 void printMap() {
     int i;
-    printf("Map height: %d\n", mapHeight);
-    printf("Map width: %d\n", mapWidth);
-    for (i = 0; i < mapHeight; i++) {
-        printf("%s\n", mapState[i]);
+    for (i = 0; i < cfg.mapHeight; i++) {
+        printf("%s\n", mapData.map[i]);
     }
 }
 
-void loadMap() {
+void checkAndSetSpawnPositions(char *mapRow, int rowPosition) {
     int i;
+    for (i = 0; i < cfg.mapWidth; i++) {
+        int cellValue = (int) mapRow[i];
+        if (cellValue >= 65 && cellValue <= 72) {
+            int index = cellValue - 65;
+            mapData.startPositions[index].rowPosition = rowPosition;
+            mapData.startPositions[index].columnPosition = i;
+        }
+    }
+}
+
+void allocateMap() {
+    int i;
+
+    /* Allocate map */
+    mapData.map = malloc(cfg.mapHeight * sizeof(char *));
+    if (mapData.map == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        exitHandler(1);
+    }
+    for(i = 0; i < cfg.mapHeight; i++) {
+        mapData.map[i] = malloc(cfg.mapWidth * sizeof(char) + 3);
+        if (mapData.map[i] == NULL) {
+            fprintf(stderr, "Memory allocation failed\n");
+            exitHandler(1);
+        }
+        memset(mapData.map[i], 0, cfg.mapWidth * sizeof(char) + 2);
+    }
+
+    /* Allocate food positions */
+    mapData.foodPositions = malloc(cfg.foodCount * sizeof(struct Position));
+    if (mapData.foodPositions == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        exitHandler(1);
+    }
+    memset(mapData.foodPositions, 0, cfg.foodCount * sizeof(struct Position));
+
+    /* Allocate start positions */
+    mapData.startPositions = malloc(MAX_PLAYER_COUNT * sizeof(struct Position));
+    if (mapData.startPositions == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        exitHandler(1);
+    }
+    memset(mapData.startPositions, 0, MAX_PLAYER_COUNT * sizeof(struct Position));
+}
+
+void loadMapData() {
     FILE *mapFile = NULL;
+    int i;
+
+    allocateMap();
+    mapData.currentfoodCount = cfg.foodCount;
 
     mapFile = fopen(cfg.mapFilename, "r");
     if (mapFile == NULL) {
@@ -692,28 +864,25 @@ void loadMap() {
         exitHandler(1);
     }
 
-    for (i = 0; i < MAX_MAP_HEIGHT; i++) {
+    for (i = 0; i < cfg.mapHeight; i++) {
         int rowLength;
-        if (getLine(mapState[i], sizeof(mapState[i]), mapFile) == NULL) {
-            if (mapWidth == 0) {
-                fprintf(stderr, "A map can not be empty\n");
+        if (getLine(mapData.map[i], cfg.mapWidth * sizeof(char) + 3, mapFile) == NULL) {
+            if (i != cfg.mapHeight - 1) {
+                fprintf(stderr, "Mismatching map height and configured height\n");
                 fclose(mapFile);
                 exitHandler(1);
             }
-            mapHeight = i;
             break;
         }
 
-        rowLength = strlen(mapState[i]);
-        if (mapWidth == 0) {
-            mapWidth = rowLength;
-        } else if (rowLength != mapWidth) {
-            fprintf(stderr, "A map can not contain different width rows\n");
+        rowLength = strlen(mapData.map[i]);
+        if (rowLength != cfg.mapWidth) {
+            fprintf(stderr, "Mismatching map width and configured width\n");
             fclose(mapFile);
             exitHandler(1);
         }
 
-        checkAndSetSpawnPositions(mapState[i], rowLength, i);
+        checkAndSetSpawnPositions(mapData.map[i], i);
     }
 
     fclose(mapFile);
@@ -726,8 +895,16 @@ void init() {
     struct sigaction sigIntHandler;
 
     /* load initial configuration */
-    loadCfg();
-    loadMap();
+    if (loadCfg() < 0) {
+        fprintf(stderr, "Error loading configuration\n");
+        exitHandler(1);
+    }
+    loadMapData();
+    loadPlayerData();
+    if (initMoveQueue(MAX_PLAYER_COUNT) < 0) {
+        fprintf(stderr, "Error initializing move queue\n");
+        exitHandler(1);
+    }
 
     /* initialization for setting players random positions later. Should only be called once. */
     srand(time(NULL));
@@ -774,6 +951,8 @@ void init() {
 
 int main() {
     init();
+    printStartPositions();
+    printPlayerPositions();
 
     /* Main connection accepting loop */
     while (1) {
