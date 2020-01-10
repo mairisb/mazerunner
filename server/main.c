@@ -153,10 +153,10 @@ void printSockets() {
 void closeSocket(int socket) {
     if (socket > 0) {
         if (shutdown(socket, SHUT_RDWR) < 0) {
-            perror("Error shutting down socket: ");
+            perror("Error shutting down socket");
         }
         if (close(socket) < 0) {
-            perror("Error closing socket: ");
+            perror("Error closing socket");
         }
     }
 }
@@ -236,7 +236,7 @@ int socketSend(int socket, char *message, int messageSize) {
     while (sentTotal < messageSize) {
         sentBytes = send(socket, &message[sentTotal], messageSize - sentTotal, MSG_NOSIGNAL);
         if (sentBytes < 0) {
-            perror("Error sending to socket, removing player: ");
+            perror("Error sending to socket, removing player");
             handleDisconnect(socket);
             errno = 0;
             return -1;
@@ -262,7 +262,7 @@ int socketReceive(int socket, char *buff, int messageSize) {
     while (recTotal < messageSize) {
         recBytes = recv(socket, &buff[recTotal], messageSize - recTotal, 0);
         if (recBytes < 0) {
-            perror("Error reading socket, removing player: ");
+            perror("Error reading socket, removing player");
             handleDisconnect(socket);
             errno = 0;
             return -1;
@@ -684,7 +684,7 @@ void *setIncomingMoves(void *args) {
 
         ret = poll(pollList, MAX_PLAYER_COUNT, 10);
         if(ret < 0) {
-            perror("Error starting polling: ");
+            perror("Error starting polling");
             *threadStatus = THREAD_ERRORED;
             return NULL;
         } else if (ret == 0) {
@@ -1038,12 +1038,12 @@ void init() {
     /* initialize main server socket */
     netSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (netSocket < 0) {
-        perror("Error creating socket: ");
+        perror("Error creating socket");
         exitHandler(1);
     }
     /* set main server socket as reusable so reboots work */
     if (setsockopt(netSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
-        perror("Error on setting socket to SO_REUSEADDR: ");
+        perror("Error on setting socket to SO_REUSEADDR");
         exitHandler(1);
     }
 
@@ -1052,12 +1052,12 @@ void init() {
     serverAddress.sin_addr.s_addr = INADDR_ANY;
 
     if (bind(netSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0) {
-        perror("Error binding server socket: ");
+        perror("Error binding server socket");
         exitHandler(1);
     }
 
     if (listen(netSocket, 30) < 0) {
-        perror("Error listening on server socket: ");
+        perror("Error listening on server socket");
         exitHandler(1);
     }
     printf("Listening...\n");
@@ -1070,7 +1070,7 @@ int main() {
     while (1) {
         int clientSocket = accept(netSocket, NULL, NULL);
         if (clientSocket < 0) {
-            perror("Error accepting client: ");
+            perror("Error accepting client");
             exitHandler(1);
         }
         printf("Client connected\n");
