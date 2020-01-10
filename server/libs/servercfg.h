@@ -13,6 +13,7 @@
 #define SETTING_FOOD_COUNT "food_count"
 #define SETTING_FOOD_TRHESHOLD "food_respawn_threshold"
 #define SETTING_MOVE_RESOLUTION_MODE "move_resolution_mode"
+#define SETTING_POINT_WIN_COUNT "point_win_count"
 
 struct ServerCfg {
     int serverPort;
@@ -22,6 +23,7 @@ struct ServerCfg {
     int foodCount;
     int foodRespawnThreshold;
     char moveResolutionMode;
+    int pointWinCount;
 };
 
 struct ServerCfg cfg;

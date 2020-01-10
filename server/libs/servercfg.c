@@ -17,6 +17,7 @@ void printServerCfg() {
     printf("\t%s = %d\n", SETTING_FOOD_COUNT, cfg.foodCount);
     printf("\t%s = %d\n", SETTING_FOOD_TRHESHOLD, cfg.foodRespawnThreshold);
     printf("\t%s = %c\n", SETTING_MOVE_RESOLUTION_MODE, cfg.moveResolutionMode);
+    printf("\t%s = %d\n", SETTING_POINT_WIN_COUNT, cfg.pointWinCount);
 }
 
 void parseSetting(char *key, char *val) {
@@ -34,6 +35,8 @@ void parseSetting(char *key, char *val) {
         sscanf(val, "%d", &cfg.foodRespawnThreshold);
     } else if (strcmp(key, SETTING_MOVE_RESOLUTION_MODE) == 0) {
         cfg.moveResolutionMode = val[0];
+    } else if (strcmp(key, SETTING_POINT_WIN_COUNT) == 0) {
+        sscanf(val, "%d", &cfg.pointWinCount);
     }
 }
 
@@ -58,6 +61,9 @@ int validateCfg() {
         return -1;
     } else if (cfg.moveResolutionMode != 'F' && cfg.moveResolutionMode != 'L') {
         fprintf(stderr, "Configuration '%s' value can only be 'F' (first) or 'L' (last)\n", SETTING_MOVE_RESOLUTION_MODE);
+        return -1;
+    } else if (cfg.pointWinCount <= 1) {
+        fprintf(stderr, "Configuration '%s' value can not be <= 1\n", SETTING_POINT_WIN_COUNT);
         return -1;
     }
 
