@@ -1,13 +1,15 @@
 #include <ncurses.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "libs/clientcfg.h"
-#include "libs/utility.h"
 #include "libs/conn.h"
 #include "libs/gui.h"
+#include "libs/log.h"
+#include "libs/utility.h"
 
 #define MAX_UNAME_SIZE 16
 #define BUFF_SIZE 1024
@@ -40,11 +42,6 @@ int main(int argc, char** argv) {
     char rowNumStr[3];
     int rowNum;
 
-    /* Make sure map rows are null terminated */
-    for (int i = 0; i < MAX_MAP_HEIGHT; i++) {
-        memset(mapState[i], 0, MAX_MAP_WIDTH+1);
-    }
-
     getCfg(); /* read and set client configuration */
     initGui(); /* start curses mode */
 
@@ -75,10 +72,10 @@ int main(int argc, char** argv) {
         sleep(1);
         sockSendJoinGame(uname);
 
-        sockRecv(buff, sizeof(buff));
+        sockRecvLobbyInfo(buff);
 
         msgType = getMsgType(buff);
-        switch(msgType) {
+        switch (msgType) {
             case LOBBY_INFO:
                 displayStr("Joined game");
                 sleep(1);
@@ -101,7 +98,7 @@ int main(int argc, char** argv) {
         getPlayerInfo(buff);
         displayLobbyInfo(playerInfo.playerCnt, playerInfo.players);
 
-        sockRecv(buff, sizeof(buff));
+        sockRecvLobbyInfo(buff);
 
         msgType = getMsgType(buff);
     } while (msgType == LOBBY_INFO);
@@ -109,8 +106,8 @@ int main(int argc, char** argv) {
     /* Start game */
     if (msgType == GAME_START) {
         lastPlayerInfoByte = getPlayerInfo(buff);
-        strncpy(mapColsStr, buff+lastPlayerInfoByte, 3);
-        strncpy(mapRowsStr, buff+lastPlayerInfoByte+3, 3);
+        strncpy(mapColsStr, (buff + lastPlayerInfoByte), 3);
+        strncpy(mapRowsStr, (buff + lastPlayerInfoByte + 3), 3);
         mapCols = getCoordsFromStr(mapColsStr);
         mapRows = getCoordsFromStr(mapRowsStr);
     } else {
@@ -121,15 +118,39 @@ int main(int argc, char** argv) {
 
     /* Receive map */
     for (int i = 0; i < mapRows; i++) {
-        sockRecv(buff, sizeof(buff));
-        strncpy(rowNumStr, buff+lastPlayerInfoByte, 3);
+        sockRecvMapRow(buff, mapCols);
+        strncpy(rowNumStr, buff+1, 3);
         rowNum = getCoordsFromStr(rowNumStr);
-        strncpy(mapState[rowNum], buff+4, mapCols);
-        mapState[rowNum][mapCols] = '\0';
+        strncpy(mapState[rowNum-1], buff+4, mapCols);
     }
 
     displayMap(mapRows, mapCols, mapState);
-    getch();
+
+    sockRecvGameUpdate(buff);
+
+    noecho();
+    while(true) {
+        char c = getch();
+        switch(c) {
+            case 'a':
+            case 'A':
+                sockSendMove('L');
+                break;
+            case 'd':
+            case 'D':
+                sockSendMove('R');
+                break;
+            case 's':
+            case 'S':
+                sockSendMove('D');
+                break;
+            case 'w':
+            case 'W':
+                sockSendMove('U');
+                break;
+        }
+    }
+    echo();
 
     endGui();
     close(netSock);
@@ -138,22 +159,16 @@ int main(int argc, char** argv) {
 }
 
 int getPlayerInfo(char *msg) {
+    int i;
     /* Get player count */
     playerInfo.playerCnt = msg[1] - '0';
 
     /* Get players' usernames */
-    memset(playerInfo.players, 0, sizeof(playerInfo.players[0][0]) * MAX_PLAYER_CNT * (MAX_UNAME_SIZE + 1));
-    int i, j, k;
-    for (i = 0, j = 0, k = 2; i < playerInfo.playerCnt; k++) {
-        if (msg[k] == '\0' || j == 16) {
-            i++;
-            j = 0;
-            continue;
-        }
-        playerInfo.players[i][j] = msg[k];
-        j++;
+    for (i = 0; i < playerInfo.playerCnt; i++) {
+        strncpy(playerInfo.players[i], (msg + 2 + (MAX_UNAME_SIZE * i)), MAX_UNAME_SIZE);
     }
-    return k; /* index of last buff byte read */
+
+    return (2 + (MAX_UNAME_SIZE * i)); /* index of last buff byte read */
 }
 
 int getCoordsFromStr(char *str) {
