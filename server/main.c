@@ -92,6 +92,8 @@ pthread_t moveResolverThread;
 pthread_t moveSetterThread;
 pthread_mutex_t moveLock;
 pthread_mutex_t gameStatusLock;
+pthread_mutex_t threadStatusLock;
+int threadStatus = THREAD_RUNNING;
 
 void exitHandler(int sig);
 void handleDisconnect(int socket);
@@ -161,14 +163,33 @@ void closeSocket(int socket) {
     }
 }
 
+int getThreadStatus() {
+    int status;
+    pthread_mutex_lock(&threadStatusLock);
+    status = threadStatus;
+    pthread_mutex_unlock(&threadStatusLock);
+    return status;
+}
+
+void setThreadStatus(int status) {
+    pthread_mutex_lock(&threadStatusLock);
+    if (threadStatus != THREAD_ERRORED) {
+        threadStatus = status;
+    }
+    pthread_mutex_unlock(&threadStatusLock);
+}
+
 void exitHandler(int sig) {
     int i;
     printf("Entered exit handler\n");
+
+    setThreadStatus(THREAD_ERRORED);
 
     pthread_join(moveSetterThread, NULL);
     pthread_join(moveResolverThread, NULL);
     pthread_mutex_destroy(&moveLock);
     pthread_mutex_destroy(&gameStatusLock);
+    pthread_mutex_destroy(&threadStatusLock);
 
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
         if (players[i].socket > 0) {
@@ -355,6 +376,7 @@ void resetGame() {
     pthread_mutex_lock(&gameStatusLock);
     gameStatus = 0;
     pthread_mutex_unlock(&gameStatusLock);
+    setThreadStatus(THREAD_RUNNING);
 }
 
 void sendGameEndMessage() {
@@ -381,7 +403,7 @@ int gameEnded() {
         }
     }
 
-    if (alivePlayerCount == 1) {
+    if (alivePlayerCount <= 1) {
         printf("Only one player alive, end game\n");
         return 1;
     }
@@ -472,18 +494,31 @@ void resetOneFood(int targetRow, int targetCol) {
     }
 }
 
-void resolveIncomingMoves(int *threadStatus) {
+void resolveIncomingMoves() {
+    int tickCount = 0;
+    int timeoutMs = cfg.gameEndTimeout * 10;
     char playerDeadMessage[2] = "";
     playerDeadMessage[0] = S_PLAYER_DEAD;
 
     while(1) {
         struct Node *moveNode = NULL;
-        if (*threadStatus == THREAD_ERRORED || *threadStatus == THREAD_COMPLETED) {
+        int tStatus;
+
+        sendGameUpdateMessage();
+
+        usleep(100000);
+        tStatus = getThreadStatus();
+        if (tStatus == THREAD_ERRORED || tStatus == THREAD_COMPLETED) {
             return;
         }
 
-        sendGameUpdateMessage();
-        usleep(100000);
+        tickCount++;
+        if (tickCount == timeoutMs) {
+            printf("Game end timeout reached\n");
+            setThreadStatus(THREAD_COMPLETED);
+            return;
+        }
+
         pthread_mutex_lock(&moveLock);
 
         if (moveQueue->head == NULL) {
@@ -573,7 +608,7 @@ void resolveIncomingMoves(int *threadStatus) {
                 }
 
                 if (gameEnded()) {
-                    *threadStatus = THREAD_COMPLETED;
+                    setThreadStatus(THREAD_COMPLETED);
                     break;
                 }
                 /*printf("Current food count: %d\n", mapData.currentfoodCount);*/ /* NOTE */
@@ -586,11 +621,14 @@ void resolveIncomingMoves(int *threadStatus) {
             player->requestedMove = 0;
         }
 
+
         moveQueue->head = NULL;
         pthread_mutex_unlock(&moveLock);
-        if (*threadStatus == THREAD_COMPLETED) {
+        tStatus = getThreadStatus();
+        if (tStatus == THREAD_COMPLETED || tStatus == THREAD_ERRORED) {
             return;
         }
+        /* NOTE */
         printMap();
     }
 }
@@ -626,29 +664,31 @@ void readAndSetMove(int playerIndex) {
 
     pthread_mutex_lock(&moveLock);
 
-    if (player->requestedMove == 0) {
+    if ((cfg.moveResolutionMode == 'F' && player->requestedMove == 0) || cfg.moveResolutionMode == 'L') {
         switch (moveType) {
             case 85:
                 player->requestedMove = 1;
-                addMove(playerIndex);
                 break;
             case 68:
                 player->requestedMove = 2;
-                addMove(playerIndex);
                 break;
             case 82:
                 player->requestedMove = 3;
-                addMove(playerIndex);
                 break;
             case 76:
                 player->requestedMove = 4;
-                addMove(playerIndex);
                 break;
             default:
                 printf("Requested move is not defined\n");
                 printf("Ignoring player move\n");
                 respondWithError(player->socket, E_TECHNICAL);
                 break;
+        }
+
+        if (cfg.moveResolutionMode == 'F') {
+            addMove(playerIndex);
+        } else if (cfg.moveResolutionMode == 'L') {
+            replaceMove(playerIndex);
         }
     }
 
@@ -659,34 +699,36 @@ void *setIncomingMoves(void *args) {
     struct pollfd pollList[MAX_PLAYER_COUNT];
     int ret;
     int i;
-    int *threadStatus = args;
-    int allClientsDisconnected;
+    int tStatus;
+    int activeClientCount;
 
     while(1) {
-        if (*threadStatus == THREAD_ERRORED || *threadStatus == THREAD_COMPLETED) {
-            return NULL;
+        tStatus = getThreadStatus();
+        if (tStatus == THREAD_ERRORED || tStatus == THREAD_COMPLETED) {
+            pthread_exit(NULL);
         }
 
-        allClientsDisconnected = 1;
+        activeClientCount = 0;
 
         for (i = 0; i < MAX_PLAYER_COUNT; i++) {
-            if (allClientsDisconnected == 1 && players[i].socket > 0) {
-                allClientsDisconnected = 0;
+            if (players[i].socket > 0) {
+                activeClientCount++;
             }
             pollList[i].fd = players[i].socket;
             pollList[i].events = POLLIN;
         }
 
-        if (allClientsDisconnected == 1) {
-            *threadStatus = THREAD_COMPLETED;
-            return NULL;
+        if (activeClientCount <= 1) {
+            printf("One/none players connected, end game\n");
+            setThreadStatus(THREAD_COMPLETED);
+            pthread_exit(NULL);
         }
 
         ret = poll(pollList, MAX_PLAYER_COUNT, 10);
         if(ret < 0) {
             perror("Error starting polling");
-            *threadStatus = THREAD_ERRORED;
-            return NULL;
+            setThreadStatus(THREAD_ERRORED);
+            pthread_exit(NULL);
         } else if (ret == 0) {
             continue;
         }
@@ -697,7 +739,6 @@ void *setIncomingMoves(void *args) {
             (pollList[i].revents & POLLNVAL) == POLLNVAL) {
                 printf("Error polling client\n");
                 handleDisconnect(pollList[i].fd);
-                pollList[i].fd = 0;
             }
             else if ((pollList[i].revents & POLLIN) == POLLIN) {
                 readAndSetMove(i);
@@ -756,28 +797,29 @@ void sendGameStartMessage() {
 
 void *handleGameStart(void *args) {
     int ret;
-    int threadStatus = THREAD_RUNNING;
+    int tStatus;
 
     sendGameStartMessage();
     sendMap();
     mapData.currentfoodCount = cfg.foodCount;
     generateFood();
 
-    ret = pthread_create(&moveSetterThread, NULL, setIncomingMoves, &threadStatus);
+    ret = pthread_create(&moveSetterThread, NULL, setIncomingMoves, NULL);
     if (ret != 0) {
         perror("Failed to create moveSetterThread");
 
         pthread_exit(NULL);
     }
 
-    resolveIncomingMoves(&threadStatus);
+    resolveIncomingMoves();
     pthread_join(moveSetterThread, NULL);
 
-    if (threadStatus == THREAD_COMPLETED) {
+    tStatus = getThreadStatus();
+    if (tStatus == THREAD_COMPLETED) {
         printf("THREAD_COMPLETED\n");
         sendGameEndMessage();
         resetGame();
-    } else if (threadStatus == THREAD_ERRORED) {
+    } else if (tStatus == THREAD_ERRORED) {
         netSocketClosed = 1;
         closeSocket(netSocket); /* this socket is stuck on listening for clients */
     }
@@ -1013,6 +1055,10 @@ void init() {
         fprintf(stderr, "Error initializing game status lock\n");
         exit(1);
     }
+    if (pthread_mutex_init(&threadStatusLock, NULL) != 0) {
+        fprintf(stderr, "Error initializing thread status lock\n");
+        exit(1);
+    }
 
     /* load initial configuration */
     if (loadCfg() < 0) {
@@ -1070,7 +1116,10 @@ int main() {
     while (1) {
         int clientSocket = accept(netSocket, NULL, NULL);
         if (clientSocket < 0) {
-            perror("Error accepting client");
+            if (getThreadStatus() != THREAD_ERRORED) {
+                perror("Error accepting client");
+                setThreadStatus(THREAD_ERRORED);
+            }
             exitHandler(1);
         }
         printf("Client connected\n");

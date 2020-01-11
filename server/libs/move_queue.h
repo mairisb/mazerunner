@@ -20,6 +20,7 @@ struct QueueList *moveQueue;
 struct Node *createNode();
 int createQueueList();
 int appendNewNode();
+void replaceMove(int data);
 void addMove(int data);
 int initMoveQueue(int numberOfNodes);
 void freeMoveQueue();

@@ -14,6 +14,8 @@
 #define SETTING_FOOD_TRHESHOLD "food_respawn_threshold"
 #define SETTING_MOVE_RESOLUTION_MODE "move_resolution_mode"
 #define SETTING_POINT_WIN_COUNT "point_win_count"
+#define SETTING_GAME_START_TIMEOUT "game_start_timeout"
+#define SETTING_GAME_END_TIMEOUT "game_end_timeout"
 
 struct ServerCfg {
     int serverPort;
@@ -24,6 +26,8 @@ struct ServerCfg {
     int foodRespawnThreshold;
     char moveResolutionMode;
     int pointWinCount;
+    int gameStartTimeout;
+    int gameEndTimeout;
 };
 
 struct ServerCfg cfg;

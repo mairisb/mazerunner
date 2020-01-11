@@ -45,6 +45,53 @@ int appendNewNode() {
     return 0;
 }
 
+void replaceMove(int data) {
+    struct Node *targetNode;
+
+    if (moveQueue->head == NULL) {
+        moveQueue->head = moveQueue->start;
+        moveQueue->head->data = data;
+    } else if (moveQueue->start->data == data) {
+        if (moveQueue->head != moveQueue->start) {
+            targetNode = moveQueue->start;
+            moveQueue->start = moveQueue->start->next;
+            targetNode->next = moveQueue->head->next;
+            moveQueue->head->next = targetNode;
+            if (moveQueue->head == moveQueue->end) {
+                moveQueue->end = targetNode;
+            }
+            moveQueue->head = targetNode;
+        }
+    } else {
+        struct Node *temp = moveQueue->start;
+        targetNode = moveQueue->start->next;
+        while (temp != moveQueue->head) {
+            if (targetNode->data == data) {
+                if (moveQueue->head != targetNode) {
+                    temp->next = targetNode->next;
+                    targetNode->next = moveQueue->head->next;
+                    moveQueue->head->next = targetNode;
+                    if (moveQueue->head == moveQueue->end) {
+                        moveQueue->end = targetNode;
+                    }
+                    moveQueue->head = targetNode;
+                }
+                return;
+            }
+
+            targetNode = targetNode->next;
+            temp = temp->next;
+        }
+
+        if (moveQueue->head != moveQueue->end) {
+            moveQueue->head = moveQueue->head->next;
+            moveQueue->head->data = data;
+        } else {
+            printf("QueueList is full, cannot satisfy addMove request\n");
+        }
+    }
+}
+
 void addMove(int data) {
     if (moveQueue->head == NULL) {
         moveQueue->head = moveQueue->start;

@@ -18,6 +18,8 @@ void printServerCfg() {
     printf("\t%s = %d\n", SETTING_FOOD_TRHESHOLD, cfg.foodRespawnThreshold);
     printf("\t%s = %c\n", SETTING_MOVE_RESOLUTION_MODE, cfg.moveResolutionMode);
     printf("\t%s = %d\n", SETTING_POINT_WIN_COUNT, cfg.pointWinCount);
+    printf("\t%s = %d\n", SETTING_GAME_START_TIMEOUT, cfg.gameStartTimeout);
+    printf("\t%s = %d\n", SETTING_GAME_END_TIMEOUT, cfg.gameEndTimeout);
 }
 
 void parseSetting(char *key, char *val) {
@@ -37,6 +39,10 @@ void parseSetting(char *key, char *val) {
         cfg.moveResolutionMode = val[0];
     } else if (strcmp(key, SETTING_POINT_WIN_COUNT) == 0) {
         sscanf(val, "%d", &cfg.pointWinCount);
+    } else if (strcmp(key, SETTING_GAME_START_TIMEOUT) == 0) {
+        sscanf(val, "%d", &cfg.gameStartTimeout);
+    } else if (strcmp(key, SETTING_GAME_END_TIMEOUT) == 0) {
+        sscanf(val, "%d", &cfg.gameEndTimeout);
     }
 }
 
@@ -64,6 +70,12 @@ int validateCfg() {
         return -1;
     } else if (cfg.pointWinCount <= 1) {
         fprintf(stderr, "Configuration '%s' value can not be <= 1\n", SETTING_POINT_WIN_COUNT);
+        return -1;
+    } else if (cfg.gameStartTimeout <= 0) {
+        fprintf(stderr, "Configuration '%s' value can not be <= 0\n", SETTING_GAME_START_TIMEOUT);
+        return -1;
+    } else if (cfg.gameEndTimeout <= 0) {
+        fprintf(stderr, "Configuration '%s' value can not be <= 0\n", SETTING_GAME_END_TIMEOUT);
         return -1;
     }
 
