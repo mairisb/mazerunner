@@ -121,6 +121,10 @@ int initMoveQueue(int numberOfNodes) {
 }
 
 void freeMoveQueue() {
+    if (moveQueue == NULL) {
+        return;
+    }
+
     struct Node *node = moveQueue->start;
     while (node != NULL) {
         struct Node *temp = node->next;

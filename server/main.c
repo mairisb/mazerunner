@@ -1033,6 +1033,15 @@ void loadMapData() {
     }
 
     fclose(mapFile);
+
+    for (i = 0; i < MAX_PLAYER_COUNT; i++) {
+        struct Position *startPosition = &mapData.startPositions[i];
+        if (startPosition->columnPosition == 0 && startPosition->rowPosition == 0) {
+            fprintf(stderr, "All spawn points not set\n");
+            exitHandler(1);
+        }
+    }
+
     printMap();
 }
 
