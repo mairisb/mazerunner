@@ -23,7 +23,7 @@
 
 #define TYPE_SIZE 1
 #define USERNAME_SIZE 16
-#define MAX_PLAYER_COUNT 2
+#define MAX_PLAYER_COUNT 3
 #define PLAYER_COUNT_SIZE 1
 #define MAX_MAP_HEIGHT 999
 #define MAX_MAP_WIDTH 999
@@ -81,7 +81,6 @@ struct MapData {
 };
 
 int netSocket;
-int netSocketClosed = 0;
 
 struct MapData mapData = {};
 struct PlayerData players[MAX_PLAYER_COUNT];
@@ -197,9 +196,7 @@ void exitHandler(int sig) {
         }
     }
 
-    if (netSocketClosed == 0) {
-        closeSocket(netSocket);
-    }
+    closeSocket(netSocket);
 
     freeMoveQueue();
 
@@ -495,8 +492,8 @@ void resetOneFood(int targetRow, int targetCol) {
 }
 
 void resolveIncomingMoves() {
-    int tickCount = 0;
-    int timeoutMs = cfg.gameEndTimeout * 10;
+    int gameEndTickCount = 0;
+    int gameEndTickTimeout = cfg.gameEndTimeout * 10;
     char playerDeadMessage[2] = "";
     playerDeadMessage[0] = S_PLAYER_DEAD;
 
@@ -512,8 +509,8 @@ void resolveIncomingMoves() {
             return;
         }
 
-        tickCount++;
-        if (tickCount == timeoutMs) {
+        gameEndTickCount++;
+        if (gameEndTickCount == gameEndTickTimeout) {
             printf("Game end timeout reached\n");
             setThreadStatus(THREAD_COMPLETED);
             return;
@@ -739,6 +736,7 @@ void *setIncomingMoves(void *args) {
             (pollList[i].revents & POLLNVAL) == POLLNVAL) {
                 printf("Error polling client\n");
                 handleDisconnect(pollList[i].fd);
+                pollList[i].fd = 0;
             }
             else if ((pollList[i].revents & POLLIN) == POLLIN) {
                 readAndSetMove(i);
@@ -819,9 +817,6 @@ void *handleGameStart(void *args) {
         printf("THREAD_COMPLETED\n");
         sendGameEndMessage();
         resetGame();
-    } else if (tStatus == THREAD_ERRORED) {
-        netSocketClosed = 1;
-        closeSocket(netSocket); /* this socket is stuck on listening for clients */
     }
 
     pthread_exit(NULL);
@@ -1112,27 +1107,57 @@ void init() {
 int main() {
     init();
 
+    int ret;
+    int gameStartTickCount = 0;
+    int gameStartTickTimeout = cfg.gameStartTimeout * 10;
+    struct pollfd pollList[1];
+    pollList[0].fd = netSocket;
+    pollList[0].events = POLLIN;
+
     /* Main connection accepting loop */
     while (1) {
-        int clientSocket = accept(netSocket, NULL, NULL);
-        if (clientSocket < 0) {
-            if (getThreadStatus() != THREAD_ERRORED) {
-                perror("Error accepting client");
-                setThreadStatus(THREAD_ERRORED);
-            }
+        ret = poll(pollList, 1, 100);
+        if(ret < 0) {
+            perror("Error starting polling for server socket");
             exitHandler(1);
         }
-        printf("Client connected\n");
 
-        if (addClientToGame(clientSocket) == 0) {
-            sendLobbyInfoMessage();
-            if (connectedPlayerCount == MAX_PLAYER_COUNT) {
-                startGame();
+        if (getThreadStatus() == THREAD_ERRORED) {
+            exitHandler(1);
+        }
+
+        if (ret == 0) { /* No clients to accept */
+            if (gameStarted() == 0 && gameStartTickCount < gameStartTickTimeout) {
+                gameStartTickCount++;
             }
+        } else {
+            if ((pollList[0].revents & POLLHUP) == POLLHUP || (pollList[0].revents & POLLERR) == POLLERR ||
+            (pollList[0].revents & POLLNVAL) == POLLNVAL) {
+                printf("Error polling server socket\n");
+                exitHandler(1);
+            } else if ((pollList[0].revents & POLLIN) == POLLIN) {
+                int clientSocket = accept(netSocket, NULL, NULL);
+                if (clientSocket < 0) {
+                    perror("Error accepting client");
+                    exitHandler(1);
+                }
+                printf("Client connected\n");
+
+                if (addClientToGame(clientSocket) == 0) {
+                    gameStartTickCount = 0;
+                    sendLobbyInfoMessage();
+                }
+            }
+        }
+
+        if (gameStarted() == 0 && (connectedPlayerCount == MAX_PLAYER_COUNT || (gameStartTickCount == gameStartTickTimeout && connectedPlayerCount >= 2))) {
+            printf("Starting game\n");
+            startGame();
+            gameStartTickCount = 0;
         }
     }
 
-    close(netSocket);
+    closeSocket(netSocket);
 
     return 0;
 }
