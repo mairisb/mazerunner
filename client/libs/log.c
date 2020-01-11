@@ -14,3 +14,15 @@ void logOut(const char *format, ...) {
         fclose(logFile);
     }
 }
+
+void logOutBytes(char *bytes, int bytesCnt) {
+    int i;
+    for (i = 0; i < bytesCnt; i++) {
+        if (bytes[i] == '\0') {
+            logOut("\\0");
+        } else {
+            logOut("%c", bytes[i]);
+        }
+    }
+    logOut("\n");
+}

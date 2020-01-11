@@ -1,79 +1,171 @@
-#include <ncurses.h>
-#include <stdio.h>
+#include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <ncurses.h>
+#include <netinet/in.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #include "libs/clientcfg.h"
 #include "libs/conn.h"
 #include "libs/gui.h"
 #include "libs/log.h"
+#include "libs/misc.h"
 #include "libs/utility.h"
 
-#define MAX_UNAME_SIZE 16
-#define BUFF_SIZE 1024
-#define MAX_PLAYER_CNT 8
-#define DISPLAY_TXT_MAX_SIZE 128
-#define MAX_MAP_HEIGHT 999
-#define MAX_MAP_WIDTH 999
+char buff[BUFF_SIZE];
+char uname[MAX_UNAME_SIZE + 1];
+int playerCnt;
+struct Player players[MAX_PLAYER_CNT];
+int mapHeight, mapWidth;
+char map[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1];
+int foodCnt;
+struct Food food[MAX_FOOD_CNT];
 
-struct PlayerInfo {
-    int playerCnt;
-    char players[MAX_PLAYER_CNT][MAX_UNAME_SIZE + 1];
-};
+int parsePlayerInfo(char *msg) {
+    int bytesParsed = 0;
 
-int getPlayerInfo(char *);
-int getCoordsFromStr(char *);
+    /* get player count */
+    playerCnt = msg[0] - '0';
+    bytesParsed++;
+    /* get players' usernames */
+    for (int i = 0; i < playerCnt; i++) {
+        strncpy(players[i].uname, (msg + bytesParsed), MAX_UNAME_SIZE);
+        bytesParsed += MAX_UNAME_SIZE;
+    }
 
-struct PlayerInfo playerInfo;
+    return bytesParsed;
+}
 
-char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1];
+int loadLobbyInfo() {
+    int bytesParsed = 1;
 
-int main(int argc, char** argv) {
-    char uname[MAX_UNAME_SIZE + 1];
-    char buff[BUFF_SIZE];
-    enum MsgType msgType;
-    char displayTxt[DISPLAY_TXT_MAX_SIZE];
+    /* get player count and usernames */
+    bytesParsed += parsePlayerInfo(buff + bytesParsed);
+
+    return bytesParsed;
+}
+
+int loadStartGameInfo() {
+    int bytesParsed = 1;
+    char mapHeightStr[3];
+    char mapWidthStr[3];
+
+    /* get player count and usernames */
+    bytesParsed += parsePlayerInfo(buff + bytesParsed);
+    /* get map dimensions */
+    strncpy(mapWidthStr, (buff + bytesParsed), 3);
+    bytesParsed += 3;
+    mapWidth = strToInt(mapWidthStr, 3);
+    strncpy(mapHeightStr, (buff + bytesParsed), 3);
+    bytesParsed += 3;
+    mapHeight = strToInt(mapHeightStr, 3);
+
+    return bytesParsed;
+}
+
+int loadMapRow() {
+    int bytesParsed = 1;
+    char mapRowNumStr[3];
+    int mapRowNum;
+
+    /* get row number */
+    strncpy(mapRowNumStr, (buff + bytesParsed), 3);
+    bytesParsed += 3;
+    mapRowNum = strToInt(mapRowNumStr, 3);
+    /* get map row */
+    strncpy(map[mapRowNum - 1], (buff + bytesParsed), mapWidth);
+    bytesParsed += mapWidth;
+
+    return bytesParsed;
+}
+
+int loadGameUpdateInfo() {
+    int bytesParsed = 1;
+    char strNum[3];
+
+    /* get player count */
+    playerCnt = buff[1] - '0';
+    bytesParsed++;
+    /* get player info */
+    for (int i = 0; i < playerCnt; i++) {
+        /* get player y position */
+        strncpy(strNum, (buff + bytesParsed), 3);
+        bytesParsed += 3;
+        players[i].pos.x = strToInt(strNum, 3);
+        /* get player x position */
+        strncpy(strNum, (buff + bytesParsed), 3);
+        bytesParsed += 3;
+        players[i].pos.y = strToInt(strNum, 3);
+        /* get player points */
+        strncpy(strNum, (buff + bytesParsed), 3);
+        bytesParsed += 3;
+        players[i].points = strToInt(strNum, 3);
+    }
+    /* get food count */
+    strncpy(strNum, (buff + bytesParsed), 3);
+    bytesParsed += 3;
+    foodCnt = strToInt(strNum, 3);
+    logOut("[INFO]\tFood count: %d\n", foodCnt);
+    for (int i = 0; i < foodCnt; i++) {
+        /* get food y position */
+        strncpy(strNum, (buff + bytesParsed), 3);
+        bytesParsed += 3;
+        food[i].pos.x = strToInt(strNum, 3);
+        /* get food x position */
+        strncpy(strNum, (buff + bytesParsed), 3);
+        bytesParsed += 3;
+        food[i].pos.y = strToInt(strNum, 3);
+        logOut("[INFO]\tFood position: (%d, %d)\n", food[i].pos.x, food[i].pos.y);
+    }
+
+    return bytesParsed;
+}
+
+int main() {
     int connRes;
-    int lastPlayerInfoByte;
-    char mapRowsStr[3], mapColsStr[3];
-    int mapRows, mapCols;
-    char rowNumStr[3];
-    int rowNum;
+    enum MsgType msgType;
 
-    getCfg(); /* read and set client configuration */
-    initGui(); /* start curses mode */
+    /* load initial configuration */
+    loadCfg();
+    /* start ncurses */
+    guiStart();
 
-    displayTitle();
+    displayMainScreen();
 
+    /* get username */
     displayUnamePrompt();
-    getUname(uname, sizeof(uname));
+    getUname(uname);
 
-    msgType = NO_MESSAGE;
-    do { /* Connect to the server */
+    /* create socket */
+    sockCreate();
+
+    /* connect to the server */
+    do {
         displayStr("Connecting to server...");
         sleep(1);
-        connRes = sockCreateConn(cfg.serverIp, cfg.serverPort);
+        connRes = sockConn(cfg.serverIp, cfg.serverPort);
         if (connRes < 0) {
             displayConnError();
         }
     } while (connRes < 0);
-
     displayStr("Connection established");
     sleep(1);
 
-    do { /* Join game */
+    /* join lobby */
+    msgType = NO_MESSAGE;
+    do {
         if (msgType == GAME_IN_PROGRESS) {
             sleep(3);
         }
-
         displayStr("Joining game...");
         sleep(1);
         sockSendJoinGame(uname);
-
-        sockRecvLobbyInfo(buff);
-
+        sockRecvJoinGameResp(buff);
         msgType = getMsgType(buff);
         switch (msgType) {
             case LOBBY_INFO:
@@ -85,92 +177,67 @@ int main(int argc, char** argv) {
                 break;
             case USERNAME_TAKEN:
                 displayUnameTaken();
-                getUname(uname, sizeof(uname));
+                getUname(uname);
                 break;
             default:
-                endGui();
-                printf("Error: received unexpected message\n");
-                exit(1);
+                break;
         }
     } while (msgType != LOBBY_INFO);
 
-    do { /* Wait for other players and the game to start */
-        getPlayerInfo(buff);
-        displayLobbyInfo(playerInfo.playerCnt, playerInfo.players);
-
+    /* wait for other players and the game to start */
+    do {
+        loadLobbyInfo();
+        displayLobbyInfo(playerCnt, players);
         sockRecvLobbyInfo(buff);
-
         msgType = getMsgType(buff);
     } while (msgType == LOBBY_INFO);
 
-    /* Start game */
-    if (msgType == GAME_START) {
-        lastPlayerInfoByte = getPlayerInfo(buff);
-        strncpy(mapColsStr, (buff + lastPlayerInfoByte), 3);
-        strncpy(mapRowsStr, (buff + lastPlayerInfoByte + 3), 3);
-        mapCols = getCoordsFromStr(mapColsStr);
-        mapRows = getCoordsFromStr(mapRowsStr);
-    } else {
-        endGui();
-        printf("Error: received unexpected message\n");
-        exit(1);
+    /* game starts */
+    loadStartGameInfo();
+
+    /* load map */
+    for (int i = 0; i < mapHeight; i++) {
+        sockRecvMapRow(buff, mapWidth);
+        loadMapRow();
     }
 
-    /* Receive map */
-    for (int i = 0; i < mapRows; i++) {
-        sockRecvMapRow(buff, mapCols);
-        strncpy(rowNumStr, buff+1, 3);
-        rowNum = getCoordsFromStr(rowNumStr);
-        strncpy(mapState[rowNum-1], buff+4, mapCols);
-    }
+    displayMap(mapHeight, mapWidth, map);
 
-    displayMap(mapRows, mapCols, mapState);
+    /** TODO: create 2 threads: 1 for receiving game updates,  1 for receiving client input */
 
     sockRecvGameUpdate(buff);
+    loadGameUpdateInfo();
 
-    noecho();
-    while(true) {
+    updateMap(players, playerCnt, food, foodCnt);
+
+    while (true) {
         char c = getch();
         switch(c) {
+            case 'w':
+            case 'W':
+                // sockSendMove(UP);
+                displayStr("UP");
+                break;
             case 'a':
             case 'A':
-                sockSendMove('L');
-                break;
-            case 'd':
-            case 'D':
-                sockSendMove('R');
+                // sockSendMove(LEFT);
+                displayStr("LEFT");
                 break;
             case 's':
             case 'S':
-                sockSendMove('D');
+                // sockSendMove(DOWN);
+                displayStr("DOWN");
                 break;
-            case 'w':
-            case 'W':
-                sockSendMove('U');
+            case 'd':
+            case 'D':
+                // sockSendMove(RIGHT);
+                displayStr("RIGHT");
                 break;
         }
     }
-    echo();
 
-    endGui();
+    guiEnd();
     close(netSock);
 
     return 0;
-}
-
-int getPlayerInfo(char *msg) {
-    int i;
-    /* Get player count */
-    playerInfo.playerCnt = msg[1] - '0';
-
-    /* Get players' usernames */
-    for (i = 0; i < playerInfo.playerCnt; i++) {
-        strncpy(playerInfo.players[i], (msg + 2 + (MAX_UNAME_SIZE * i)), MAX_UNAME_SIZE);
-    }
-
-    return (2 + (MAX_UNAME_SIZE * i)); /* index of last buff byte read */
-}
-
-int getCoordsFromStr(char *str) {
-    return (str[0]-'0') * 100 + (str[1]-'0') * 10 + (str[2]-'0');
 }

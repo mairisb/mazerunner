@@ -25,7 +25,7 @@ void parseSetting(char *key, char *val) {
     }
 }
 
-void getCfg() {
+void loadCfg() {
     char line[MAX_CFG_LINE_SIZE];
     char key[MAX_CFG_LINE_SIZE];
     char val[MAX_CFG_LINE_SIZE];

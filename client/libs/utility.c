@@ -1,4 +1,5 @@
 #include "utility.h"
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -24,16 +25,19 @@ char *getLine(char *buff, int buffMaxSize, FILE *stream) {
     return buff;
 }
 
-void printBytes(char *buff, int size) {
-    int i;
-    for (i = 0; i < size; i++) {
-        if (buff[i] == '\0') {
-            printf("\\0");
-        } else if (buff[i] == '\n') {
-            printf("\\n");
-        } else {
-            printf("%c", buff[i]);
-        }
+int strToInt(char *str, int strLen) {
+    int res = 0;
+    int powOf10;
+
+    if (strLen <= 0) {
+        return -1;
     }
-    printf("\n");
+
+    powOf10 = strLen-1;
+    for (int i = 0; i < strLen; i++) {
+        res += (str[i] - '0') * pow(10, powOf10);
+        powOf10--;
+    }
+
+    return res;
 }

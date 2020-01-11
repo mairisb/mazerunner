@@ -1,8 +1,6 @@
 #ifndef CONN_H
 #define CONN_H
 
-#define MAX_UNAME_SIZE 16
-
 enum MsgType {
     NO_MESSAGE = 'N',
     JOIN_GAME = '0',
@@ -17,15 +15,21 @@ enum MsgType {
     GAME_END = '9'
 };
 
+enum Direction {
+    UP = 'U',
+    LEFT = 'L',
+    DOWN = 'D',
+    RIGHT = 'R'
+};
+
 int netSock;
 
-char getMsgType(char *);
+enum MsgType getMsgType(char *);
 void sockCreate();
 int sockConn(char *, int);
-int sockCreateConn(char *, int);
-int socketSend(char *, int);
 int sockSendJoinGame(char *);
-void sockSendMove(char c);
+int sockSendMove(enum Direction c);
+int sockRecvJoinGameResp(char *);
 int sockRecvLobbyInfo(char *);
 int sockRecvMapRow(char *, int);
 int sockRecvGameUpdate(char *);

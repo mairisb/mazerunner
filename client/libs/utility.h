@@ -4,6 +4,6 @@
 #include <stdio.h>
 
 char *getLine(char *, int, FILE *);
-void printBytes(char *, int);
+int strToInt(char *, int);
 
 #endif /* UTILITY_H */

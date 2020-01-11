@@ -17,7 +17,7 @@ struct ClientCfg {
 
 struct ClientCfg cfg;
 
-void getCfg();
+void loadCfg();
 char *getLine(char *, int, FILE *);
 
 #endif /* CLIENT_CFG_H */
