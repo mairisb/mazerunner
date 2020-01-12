@@ -1,1 +1,1 @@
-gcc main.c libs/clientcfg.c libs/log.c libs/utility.c libs/conn.c libs/gui.c -lncurses -o mazerunner
+gcc main.c libs/clientcfg.c libs/log.c libs/utility.c libs/conn.c libs/gui.c -lncurses -lm -lpthread -o mazerunner
