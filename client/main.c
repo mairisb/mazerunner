@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <ncurses.h>
 #include <netinet/in.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -124,6 +125,30 @@ int loadGameUpdateInfo() {
     return bytesParsed;
 }
 
+void *getDirection(void *vargp) {
+    while (true) {
+        char c = getch();
+        switch(c) {
+            case 'w':
+            case 'W':
+                sockSendMove(UP);
+                break;
+            case 'a':
+            case 'A':
+                sockSendMove(LEFT);
+                break;
+            case 's':
+            case 'S':
+                sockSendMove(DOWN);
+                break;
+            case 'd':
+            case 'D':
+                sockSendMove(RIGHT);
+                break;
+        }
+    }
+}
+
 int main() {
     int connRes;
     enum MsgType msgType;
@@ -201,38 +226,32 @@ int main() {
 
     displayMap(mapHeight, mapWidth, map);
 
-    /** TODO: create 2 threads: 1 for receiving game updates,  1 for receiving client input */
-
     sockRecvGameUpdate(buff);
     loadGameUpdateInfo();
 
     updateMap(players, playerCnt, food, foodCnt);
 
-    while (true) {
-        char c = getch();
-        switch(c) {
-            case 'w':
-            case 'W':
-                sockSendMove(UP);
-                break;
-            case 'a':
-            case 'A':
-                sockSendMove(LEFT);
-                break;
-            case 's':
-            case 'S':
-                sockSendMove(DOWN);
-                break;
-            case 'd':
-            case 'D':
-                sockSendMove(RIGHT);
-                break;
-        }
+    pthread_t thread_id;
+    pthread_create(&thread_id, NULL, getDirection, NULL);
+
+    do {
         sockRecvGameUpdate(buff);
+        if (getMsgType(buff) != GAME_UPDATE) {
+            break;
+        }
         loadGameUpdateInfo();
         displayMap(mapHeight, mapWidth, map);
         updateMap(players, playerCnt, food, foodCnt);
+    } while (true);
+    pthread_join(thread_id, NULL);
+
+    if (getMsgType(buff) == PLAYER_DEAD) {
+        displayStr("BEAT IT, LOSER!");
+    } else {
+        displayStr("YOU WON!");
     }
+
+    getch();
 
     guiEnd();
     close(netSock);

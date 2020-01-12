@@ -243,9 +243,18 @@ int sockRecvGameUpdate(char *buff) {
     /* get message type */
     msgSize += sockRecv(buff, 1);
     msgType = getMsgType(buff);
-    if (msgType != GAME_UPDATE) {
-        logOut("[ERROR]\tUnexpected message received\n\tExpected: GAME_UPDATE\n\tReceived: %s\n", getMsgTypeStr(msgType));
-        exit(1);
+    switch (msgType) {
+        case GAME_UPDATE:
+            break;
+        case PLAYER_DEAD:
+            logOut("[INFO]\tMessage PLAYER_DEAD received: %.*s\n", msgSize, buff);
+            return msgSize;
+        case GAME_END:
+            return msgSize;
+            logOut("[INFO]\tMessage GAME_END received: %.*s\n", msgSize, buff);
+        default:
+            logOut("[ERROR]\tUnexpected message received\n\tExpected one of: GAME_UPDATE PLAYER_DEAD GAME_OVER\n\tReceived: %s\n", getMsgTypeStr(msgType));
+            exit(1);
     }
 
     /* get player count */

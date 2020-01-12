@@ -8,6 +8,8 @@
 
 int mapOriginY;
 int mapOriginX;
+int mapHeight;
+int mapWidth;
 
 void guiStart() {
     initscr();
@@ -84,7 +86,9 @@ void displayLobbyInfo(int playerCnt, struct Player players[]) {
     refresh();
 }
 
-void displayMap(int mapHeight, int mapWidth, char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1]) {
+void displayMap(int _mapHeight, int _mapWidth, char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1]) {
+    mapHeight = _mapHeight;
+    mapWidth = _mapWidth;
     mapOriginY = ((scrHeight - mapHeight) / 2);
     mapOriginX = ((scrWidth - mapWidth) / 2);
 
@@ -96,15 +100,18 @@ void displayMap(int mapHeight, int mapWidth, char mapState[MAX_MAP_HEIGHT][MAX_M
 }
 
 void updateMap(struct Player players[], int playerCnt, struct Food food[], int foodCnt) {
-
+    mvprintw(mapOriginY, (mapOriginX + mapWidth + 2), "+------------------------+");
+    mvprintw((mapOriginY + 1), (mapOriginX + mapWidth + 2), "|                        |");
     for (int i = 0; i < playerCnt; i++) {
         mvprintw((mapOriginY + players[i].pos.y), (mapOriginX + players[i].pos.x), "%c", ('A' + i));
-        // mvprintw((mapOriginY + i), (mapOriginX + 2), "%c", ('A' + i));
+        mvprintw(mapOriginY + 2 + 2 * i, (mapOriginX + mapWidth + 2), "| %16s %c %3d |", players[i].uname, ('A' + i), players[i].points);
+        mvprintw((mapOriginY + 2 + 2 * i + 1), (mapOriginX + mapWidth + 2), "|                        |");
     }
+    mvprintw((mapOriginY + 2*playerCnt+2), (mapOriginX + mapWidth + 2), "+------------------------+");
     for (int i = 0; i < foodCnt; i++) {
         mvprintw((mapOriginY + food[i].pos.y), (mapOriginX + food[i].pos.x), "@");
-        // mvprintw((mapOriginY + i), (mapOriginX), "@");
     }
+
     refresh();
 }
 
