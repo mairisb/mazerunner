@@ -90,7 +90,7 @@ int netSocket;
 struct MapData mapData = {};
 struct PlayerData players[MAX_PLAYER_COUNT];
 int connectedPlayerCount = 0;
-int gameStatus = 0;
+int gameStatus = GAME_NOT_STARTED;
 
 pthread_t moveResolverThread;
 pthread_t moveSetterThread;
@@ -860,7 +860,6 @@ void *handleGameStart(void *args) {
 
     sendGameStartMessage();
     sendMap();
-    mapData.currentfoodCount = cfg.foodCount;
     generateFood();
 
     ret = pthread_create(&moveSetterThread, NULL, setIncomingMoves, NULL);
@@ -1196,7 +1195,7 @@ int main() {
                 }
                 printf("Client connected\n");
 
-                if (addClientToGame(clientSocket)) {
+                if (addClientToGame(clientSocket) == 1) {
                     gameStartTickCount = 0;
                     sendLobbyInfoMessage();
                 }
