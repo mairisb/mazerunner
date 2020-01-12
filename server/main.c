@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <poll.h>
 
+/* Custom made libraries */
 #include "libs/servercfg.h"
 #include "libs/utility.h"
 #include "libs/move_queue.h"
@@ -34,6 +35,8 @@
 #define MAX_MAP_HEIGHT 999
 #define MAX_MAP_WIDTH 999
 #define MAX_FOOD_COUNT 999
+
+#define FOOD_RESPAWN_ATTEMPTS 5 /* How many times to attempt to spawn a single food */
 
 #define R_JOIN_GAME '0'
 #define R_MOVE '1'
@@ -205,7 +208,7 @@ int getGameStatus() {
 
 void setGameStatus(int status) {
     pthread_mutex_lock(&gameStatusLock);
-    gameStatus = 0;
+    gameStatus = status;
     pthread_mutex_unlock(&gameStatusLock);
 }
 
@@ -224,8 +227,9 @@ void exitHandler(int sig) {
     int i;
     printf("Entered exit handler\n");
 
-    setThreadStatus(THREAD_ERRORED);
+    setThreadStatus(THREAD_ERRORED); /* tell threads to stop */
 
+    /* Clean up threads */
     pthread_join(moveSetterThread, NULL);
     pthread_join(moveResolverThread, NULL);
     pthread_mutex_destroy(&moveLock);
@@ -237,12 +241,10 @@ void exitHandler(int sig) {
             closeSocket(players[i].socket);
         }
     }
-
     closeSocket(netSocket);
 
     freeMoveQueue();
 
-    /* Free map */
     if (mapData.map != NULL) {
         for (i = 0; i < cfg.mapHeight; i++) {
             if (mapData.map[i] != NULL) {
@@ -267,6 +269,7 @@ void handleDisconnect(int socket) {
         if (players[i].socket == socket) {
             players[i].socket = 0;
             if (getGameStatus() == GAME_NOT_STARTED) {
+                /* if a client disconnects during game, we still want to send this */
                 connectedPlayerCount--;
                 players[i].username[0] = '\0';
             } else {
@@ -284,6 +287,7 @@ int socketSend(int socket, char *message, int messageSize) {
     int sentBytes = 0;
     int sentTotal = 0;
 
+    /* socket might not send full message in one go, need to retry until all is sent */
     while (sentTotal < messageSize) {
         sentBytes = send(socket, &message[sentTotal], messageSize - sentTotal, MSG_NOSIGNAL);
         if (sentBytes < 0) {
@@ -310,6 +314,7 @@ int socketReceive(int socket, char *buff, int messageSize) {
     int recBytes = 0;
     int recTotal = 0;
 
+    /* socket might not receive full message in one go, need to retry until all is sent */
     while (recTotal < messageSize) {
         recBytes = recv(socket, &buff[recTotal], messageSize - recTotal, 0);
         if (recBytes < 0) {
@@ -346,6 +351,10 @@ void respondWithError(int clientSocket, char errorType) {
         close(clientSocket);
     }
 }
+
+/*************************************
+ Functions that add data to messages
+*************************************/
 
 int addUsernamesAndPoints(char *buff) {
     int size = 0;
@@ -423,6 +432,10 @@ int addUsernames(char *buff) {
     return size;
 }
 
+/************************************************
+ Functions that construct messages for each type
+************************************************/
+
 void sendLobbyInfoMessage() {
     int actualSize = 0;
     char lobbyInfoMessage[LOBBY_INFO_MSG_SIZE] = "";
@@ -478,13 +491,15 @@ void sendGameEndMessage() {
     int actualSize = 0;
     char gameEndMessage[GAME_END_MSG_SIZE] = "";
 
-    printf("sending game end message\n");
-
     actualSize += sprintf(gameEndMessage, "%c%d", S_GAME_END, connectedPlayerCount);
     actualSize += addUsernamesAndPoints(&gameEndMessage[actualSize]);
 
     sendToAll(gameEndMessage, actualSize);
 }
+
+/***************************************
+ Functions for game duration processing
+***************************************/
 
 void resetGame() {
     char **map = mapData.map;
@@ -501,6 +516,7 @@ void resetGame() {
         player->points = 1;
         player->requestedMove = 0;
 
+        /* Reset player starting positions back */
         char playerSymbol = (char) 65 + i;
         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
         playerPosition->rowPosition = mapData.startPositions[i].rowPosition;
@@ -553,18 +569,20 @@ void generateFood() {
         if (foodPosition->rowPosition == 0 && foodPosition->columnPosition == 0) {
             int randRowPos = 0;
             int randColPos = 0;
-            do {
+            int i;
+            for (i = 0; i < FOOD_RESPAWN_ATTEMPTS; i++) {
                 randRowPos = rand() % (cfg.mapHeight - 2) + 1;
                 randColPos = rand() % (cfg.mapWidth - 2) + 1;
-            } while (map[randRowPos][randColPos] != ' ');
-
-            map[randRowPos][randColPos] = '@';
-            foodPosition->rowPosition = randRowPos;
-            foodPosition->columnPosition = randColPos;
+                if (map[randRowPos][randColPos] == ' ') {
+                    map[randRowPos][randColPos] = '@';
+                    foodPosition->rowPosition = randRowPos;
+                    foodPosition->columnPosition = randColPos;
+                    mapData.currentfoodCount++;
+                    break;
+                }
+            }
         }
     }
-
-    mapData.currentfoodCount = cfg.foodCount;
 }
 
 void resetOneFood(int targetRow, int targetCol) {
@@ -676,13 +694,11 @@ void resolveIncomingMoves() {
                     if (targetPlayer->points > player->points) {
                         targetPlayer->points += player->points;
                         player->points = 0;
-                        printf("Sending player dead to: %s\n", player->username);
                         socketSend(player->socket, playerDeadMessage, sizeof(S_PLAYER_DEAD));
                         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
                     } else if (targetPlayer->points < player->points) {
                         player->points += targetPlayer->points;
                         targetPlayer->points = 0;
-                        printf("Sending player dead to: %s\n", targetPlayer->username);
                         socketSend(targetPlayer->socket, playerDeadMessage, sizeof(S_PLAYER_DEAD));
                         map[targetRow][targetCol] = playerSymbol;
                         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
