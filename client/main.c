@@ -110,7 +110,6 @@ int loadGameUpdateInfo() {
     strncpy(strNum, (buff + bytesParsed), 3);
     bytesParsed += 3;
     foodCnt = strToInt(strNum, 3);
-    logOut("[INFO]\tFood count: %d\n", foodCnt);
     for (int i = 0; i < foodCnt; i++) {
         /* get food y position */
         strncpy(strNum, (buff + bytesParsed), 3);
@@ -120,7 +119,6 @@ int loadGameUpdateInfo() {
         strncpy(strNum, (buff + bytesParsed), 3);
         bytesParsed += 3;
         food[i].pos.y = strToInt(strNum, 3);
-        logOut("[INFO]\tFood position: (%d, %d)\n", food[i].pos.x, food[i].pos.y);
     }
 
     return bytesParsed;
@@ -215,25 +213,25 @@ int main() {
         switch(c) {
             case 'w':
             case 'W':
-                // sockSendMove(UP);
-                displayStr("UP");
+                sockSendMove(UP);
                 break;
             case 'a':
             case 'A':
-                // sockSendMove(LEFT);
-                displayStr("LEFT");
+                sockSendMove(LEFT);
                 break;
             case 's':
             case 'S':
-                // sockSendMove(DOWN);
-                displayStr("DOWN");
+                sockSendMove(DOWN);
                 break;
             case 'd':
             case 'D':
-                // sockSendMove(RIGHT);
-                displayStr("RIGHT");
+                sockSendMove(RIGHT);
                 break;
         }
+        sockRecvGameUpdate(buff);
+        loadGameUpdateInfo();
+        displayMap(mapHeight, mapWidth, map);
+        updateMap(players, playerCnt, food, foodCnt);
     }
 
     guiEnd();

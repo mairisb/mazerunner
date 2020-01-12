@@ -112,10 +112,10 @@ int sockSendJoinGame(char *uname) {
 
 int sockSendMove(enum Direction direction) {
     const int msgSize = 2;
-    char msg[msgSize];
+    char msg[msgSize+1];
     int retVal;
 
-    sprintf(msg, "%c%c", MOVE, direction);
+    sprintf(msg, "%c%c", MOVE, (char)direction);
     retVal = sockSend(msg, msgSize);
 
     logOut("[INFO]\tMessage MOVE sent: %.*s\n", msgSize, msg);
