@@ -115,6 +115,18 @@ void updateMap(struct Player players[], int playerCnt, struct Food food[], int f
     refresh();
 }
 
+void displayScoreBoard(struct Player players[], int playerCnt) {
+    erase();
+    guiPrintLineMid(-2, "GAME OVER");
+    guiPrintLineMid(0, "SCOREBOARD");
+    guiPrintLineMid(1, "--------------------");
+    for (int i = 0; i < playerCnt; i++) {
+        mvprintw((scrCtrY + 2 + i), (scrCtrX - ((MAX_UNAME_SIZE + 4) / 2)), "%16s %3d", players[i].uname, players[i].points);
+    }
+    refresh();
+    getch();
+}
+
 void getUname(char *uname) {
     char c;
     int i;

@@ -125,6 +125,28 @@ int loadGameUpdateInfo() {
     return bytesParsed;
 }
 
+int loadGameEndInfo() {
+    int bytesParsed = 1;
+    char strNum[3];
+
+    /* get player count */
+    playerCnt = buff[1] - '0';
+    bytesParsed++;
+    /* get player info */
+    for (int i = 0; i < playerCnt; i++) {
+        /* get player username */
+        strncpy(players[i].uname, (buff + bytesParsed), MAX_UNAME_SIZE);
+        bytesParsed += MAX_UNAME_SIZE;
+        /* get player points */
+        strncpy(strNum, (buff + bytesParsed), 3);
+        bytesParsed += 3;
+        players[i].points = strToInt(strNum, 3);
+        logOut("[DEBUG]\t%s %d\n", players[i].uname, players[i].points);
+    }
+
+    return bytesParsed;
+}
+
 void *getDirection(void *vargp) {
     while (true) {
         char c = getch();
@@ -243,15 +265,18 @@ int main() {
         displayMap(mapHeight, mapWidth, map);
         updateMap(players, playerCnt, food, foodCnt);
     } while (true);
+
+    pthread_cancel(thread_id);
     pthread_join(thread_id, NULL);
 
     if (getMsgType(buff) == PLAYER_DEAD) {
-        displayStr("BEAT IT, LOSER!");
-    } else {
-        displayStr("YOU WON!");
+        sockRecvGameUpdate(buff);
     }
 
-    getch();
+    loadGameEndInfo();
+
+
+    displayScoreBoard(players, playerCnt);
 
     guiEnd();
     close(netSock);

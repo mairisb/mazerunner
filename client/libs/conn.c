@@ -245,32 +245,33 @@ int sockRecvGameUpdate(char *buff) {
     msgType = getMsgType(buff);
     switch (msgType) {
         case GAME_UPDATE:
-            break;
+            /* get player count */
+            msgSize += sockRecv((buff + msgSize), 1);
+            playerCnt = buff[1] - '0';
+            /* get player coords and points */
+            msgSize += sockRecv((buff + msgSize), (9 * playerCnt));
+            /* get food count */
+            msgSize += sockRecv(foodCntStr, 3);
+            foodCnt = strToInt(foodCntStr, 3);
+            strncpy((buff + msgSize - 3), foodCntStr, 3);
+            /* get food coords */
+            msgSize += sockRecv((buff + msgSize), (6 * foodCnt));
+            logOut("[INFO]\tMessage GAME_UPDATE received: %.*s\n", msgSize, buff);
+            return msgSize;
         case PLAYER_DEAD:
             logOut("[INFO]\tMessage PLAYER_DEAD received: %.*s\n", msgSize, buff);
             return msgSize;
         case GAME_END:
+            /* get player count */
+            msgSize += sockRecv((buff + msgSize), 1);
+            playerCnt = buff[1] - '0';
+            /* get player usernames and points */
+            msgSize += sockRecv((buff + msgSize), ((MAX_UNAME_SIZE + 3) * playerCnt));
+            // logOut("[INFO]\tMessage GAME_END received: ");
+            // logOutBytes(buff, msgSize);
             return msgSize;
-            logOut("[INFO]\tMessage GAME_END received: %.*s\n", msgSize, buff);
         default:
             logOut("[ERROR]\tUnexpected message received\n\tExpected one of: GAME_UPDATE PLAYER_DEAD GAME_OVER\n\tReceived: %s\n", getMsgTypeStr(msgType));
             exit(1);
     }
-
-    /* get player count */
-    msgSize += sockRecv((buff + msgSize), 1);
-    playerCnt = buff[1] - '0';
-    /* get player coords and points */
-    msgSize += sockRecv((buff + msgSize), (9 * playerCnt));
-
-    /* get food count */
-    msgSize += sockRecv(foodCntStr, 3);
-    foodCnt = strToInt(foodCntStr, 3);
-    strncpy((buff + msgSize - 3), foodCntStr, 3);
-    /* get food coords */
-    msgSize += sockRecv((buff + msgSize), (6 * foodCnt));
-
-    logOut("[INFO]\tMessage GAME_UPDATE received: %.*s\n", msgSize, buff);
-
-    return msgSize;
 }
