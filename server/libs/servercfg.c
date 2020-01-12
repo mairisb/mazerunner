@@ -12,6 +12,14 @@ void printServerCfg() {
     printf("Server's configuration:\n");
     printf("\t%s = %d\n", SETTING_SERVER_PORT, cfg.serverPort);
     printf("\t%s = %s\n", SETTING_MAP_FILENAME, cfg.mapFilename);
+    printf("\t%s = %d\n", SETTING_MAP_HEIGHT, cfg.mapHeight);
+    printf("\t%s = %d\n", SETTING_MAP_WIDTH, cfg.mapWidth);
+    printf("\t%s = %d\n", SETTING_FOOD_COUNT, cfg.foodCount);
+    printf("\t%s = %d\n", SETTING_FOOD_TRHESHOLD, cfg.foodRespawnThreshold);
+    printf("\t%s = %c\n", SETTING_MOVE_RESOLUTION_MODE, cfg.moveResolutionMode);
+    printf("\t%s = %d\n", SETTING_POINT_WIN_COUNT, cfg.pointWinCount);
+    printf("\t%s = %d\n", SETTING_GAME_START_TIMEOUT, cfg.gameStartTimeout);
+    printf("\t%s = %d\n", SETTING_GAME_END_TIMEOUT, cfg.gameEndTimeout);
 }
 
 void parseSetting(char *key, char *val) {
@@ -19,25 +27,62 @@ void parseSetting(char *key, char *val) {
         sscanf(val, "%d", &cfg.serverPort);
     } else if (strcmp(key, SETTING_MAP_FILENAME) == 0) {
         strcpy(cfg.mapFilename, val);
+    } else if (strcmp(key, SETTING_MAP_HEIGHT) == 0) {
+        sscanf(val, "%d", &cfg.mapHeight);
+    } else if (strcmp(key, SETTING_MAP_WIDTH) == 0) {
+        sscanf(val, "%d", &cfg.mapWidth);
+    } else if (strcmp(key, SETTING_FOOD_COUNT) == 0) {
+        sscanf(val, "%d", &cfg.foodCount);
+    } else if (strcmp(key, SETTING_FOOD_TRHESHOLD) == 0) {
+        sscanf(val, "%d", &cfg.foodRespawnThreshold);
+    } else if (strcmp(key, SETTING_MOVE_RESOLUTION_MODE) == 0) {
+        cfg.moveResolutionMode = val[0];
+    } else if (strcmp(key, SETTING_POINT_WIN_COUNT) == 0) {
+        sscanf(val, "%d", &cfg.pointWinCount);
+    } else if (strcmp(key, SETTING_GAME_START_TIMEOUT) == 0) {
+        sscanf(val, "%d", &cfg.gameStartTimeout);
+    } else if (strcmp(key, SETTING_GAME_END_TIMEOUT) == 0) {
+        sscanf(val, "%d", &cfg.gameEndTimeout);
     }
 }
 
-void initCfg() {
-    cfg.serverPort = -1;
-    memset(cfg.mapFilename, 0, sizeof(cfg.mapFilename));
-}
-
-void validateCfg() {
-    if (cfg.serverPort == -1) {
+int validateCfg() {
+    if (cfg.serverPort == 0) {
         fprintf(stderr, "Configuration '%s' is mandatory\n", SETTING_SERVER_PORT);
-        exit(1);
+        return -1;
     } else if (strlen(cfg.mapFilename) == 0) {
         fprintf(stderr, "Configuration '%s' is mandatory\n", SETTING_MAP_FILENAME);
-        exit(1);
+        return -1;
+    } else if (cfg.mapHeight <= 0) {
+        fprintf(stderr, "Configuration '%s' can not be <= 0\n", SETTING_MAP_HEIGHT);
+        return -1;
+    } else if (cfg.mapWidth <= 0) {
+        fprintf(stderr, "Configuration '%s' can not be <= 0\n", SETTING_MAP_WIDTH);
+        return -1;
+    } else if (cfg.foodCount <= 0) {
+        fprintf(stderr, "Configuration '%s' can not be <= 0\n", SETTING_FOOD_COUNT);
+        return -1;
+    } else if (cfg.foodRespawnThreshold >= cfg.foodCount) {
+        fprintf(stderr, "Configuration '%s' can not be >= to setting '%s'\n", SETTING_FOOD_TRHESHOLD, SETTING_FOOD_COUNT);
+        return -1;
+    } else if (cfg.moveResolutionMode != 'F' && cfg.moveResolutionMode != 'L') {
+        fprintf(stderr, "Configuration '%s' value can only be 'F' (first) or 'L' (last)\n", SETTING_MOVE_RESOLUTION_MODE);
+        return -1;
+    } else if (cfg.pointWinCount <= 1) {
+        fprintf(stderr, "Configuration '%s' value can not be <= 1\n", SETTING_POINT_WIN_COUNT);
+        return -1;
+    } else if (cfg.gameStartTimeout <= 0) {
+        fprintf(stderr, "Configuration '%s' value can not be <= 0\n", SETTING_GAME_START_TIMEOUT);
+        return -1;
+    } else if (cfg.gameEndTimeout <= 0) {
+        fprintf(stderr, "Configuration '%s' value can not be <= 0\n", SETTING_GAME_END_TIMEOUT);
+        return -1;
     }
+
+    return 0;
 }
 
-void loadCfg() {
+int loadCfg() {
     char line[MAX_CFG_LINE_SIZE];
     char key[MAX_CFG_LINE_SIZE];
     char val[MAX_CFG_LINE_SIZE];
@@ -50,8 +95,6 @@ void loadCfg() {
         exit(1);
     }
 
-    initCfg();
-
     /* Read config file */
     while (getLine(line, MAX_CFG_LINE_SIZE, file) != NULL) {
         if (strlen(line) > 0 && !isComment(line)) {
@@ -60,8 +103,12 @@ void loadCfg() {
         }
     }
 
-    validateCfg();
-    printServerCfg();
-
     fclose(file);
+
+    if (validateCfg() < 0) {
+        return -1;
+    }
+
+    printServerCfg();
+    return 0;
 }
