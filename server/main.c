@@ -432,7 +432,7 @@ void sendGameStartMessage() {
     actualSize += sprintf(&gameStartMessage[actualSize], "%03d%03d", cfg.mapWidth, cfg.mapHeight);
 
     printf("Sending game start message: ");
-    printBytes(lobbyInfoMessage, actualSize);
+    printBytes(gameStartMessage, actualSize);
 
     sendToAll(gameStartMessage, actualSize);
 }
@@ -476,7 +476,7 @@ void sendGameEndMessage() {
     actualSize += addUsernamesAndPoints(&gameEndMessage[actualSize]);
 
     printf("Sending game end message: ");
-    printBytes(lobbyInfoMessage, actualSize);
+    printBytes(gameEndMessage, actualSize);
 
     sendToAll(gameEndMessage, actualSize);
 }
@@ -1081,7 +1081,7 @@ void loadMapData() {
 void init() {
     int enable = 1;
     struct sockaddr_in serverAddress;
-    struct sigaction sigIntHandler;
+    struct sigaction sigCfg;
 
     printf("Initializing server\n");
 
@@ -1115,10 +1115,10 @@ void init() {
     srand(time(NULL));
 
     /* set exitHandler on signals */
-    sigIntHandler.sa_handler = sigIntHandler;
-    sigemptyset(&sigIntHandler.sa_mask);
-    sigIntHandler.sa_flags = 0;
-    sigaction(SIGINT, &sigIntHandler, NULL);
+    sigCfg.sa_handler = sigIntHandler;
+    sigemptyset(&sigCfg.sa_mask);
+    sigCfg.sa_flags = 0;
+    sigaction(SIGINT, &sigCfg, NULL);
 
     /* initialize main server socket */
     g_netSocket = socket(AF_INET, SOCK_STREAM, 0);
