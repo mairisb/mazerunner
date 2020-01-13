@@ -96,6 +96,13 @@ void displayMap(int _mapHeight, int _mapWidth, char mapState[MAX_MAP_HEIGHT][MAX
     for (int i = 0; i < mapHeight; i++) {
         mvprintw((mapOriginY + i), mapOriginX, mapState[i]);
     }
+
+    mvprintw(mapOriginY, (mapOriginX - 28), "+------------------------+");
+    for (int i = 0; i < ((MAX_PLAYER_CNT * 2) + 1); i++) {
+        mvprintw((mapOriginY + 1 + i), (mapOriginX - 28), "|                        |");
+    }
+    mvprintw((mapOriginY + 1 + ((MAX_PLAYER_CNT * 2) + 1)), (mapOriginX - 28), "+------------------------+");
+
     refresh();
 }
 
@@ -108,14 +115,10 @@ void updateMap(struct Player players[], struct Player playersOld[], int playerCn
         mvprintw((mapOriginY + foodOld[i].pos.y), (mapOriginX + foodOld[i].pos.x), " ");
     }
 
-    mvprintw(mapOriginY, (mapOriginX + mapWidth + 2), "+------------------------+");
-    mvprintw((mapOriginY + 1), (mapOriginX + mapWidth + 2), "|                        |");
     for (int i = 0; i < playerCnt; i++) {
         mvprintw((mapOriginY + players[i].pos.y), (mapOriginX + players[i].pos.x), "%c", ('A' + i));
-        mvprintw(mapOriginY + 2 + 2 * i, (mapOriginX + mapWidth + 2), "| %16s %c %3d |", players[i].uname, ('A' + i), players[i].points);
-        mvprintw((mapOriginY + 2 + 2 * i + 1), (mapOriginX + mapWidth + 2), "|                        |");
+        mvprintw(mapOriginY + 2 + 2 * i, (mapOriginX - 26), "%16s %c %3d", players[i].uname, ('A' + i), players[i].points);
     }
-    mvprintw((mapOriginY + 2*playerCnt+2), (mapOriginX + mapWidth + 2), "+------------------------+");
     for (int i = 0; i < foodCnt; i++) {
         mvprintw((mapOriginY + food[i].pos.y), (mapOriginX + food[i].pos.x), "@");
     }
