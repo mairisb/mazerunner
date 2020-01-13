@@ -448,7 +448,7 @@ void sendMap() {
                 mapRowPtr[j] = ' ';
             }
         }
-        printf("Sending map row: %s\n", i + 1, mapMessage);
+        printf("Sending map row: %s\n", mapMessage);
         sendToAll(mapMessage, actualSize);
     }
 }
