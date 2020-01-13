@@ -79,7 +79,7 @@ void displayUnameTaken() {
 void displayLobbyInfo(int playerCnt, struct Player players[]) {
     erase();
     mvprintw(scrCtrY, (scrCtrX - (12 / 2)), "Players: %d/%d", playerCnt, MAX_PLAYER_CNT);
-    guiPrintLineMid(1, "----------------");
+    guiPrintLineMid(1, "------------------");
     for (int i = 0; i < playerCnt; i++) {
         mvprintw((scrCtrY + 2 + i), (scrCtrX - (MAX_UNAME_SIZE / 2)), players[i].uname);
     }
@@ -117,9 +117,8 @@ void updateMap(struct Player players[], int playerCnt, struct Food food[], int f
 
 void displayScoreBoard(struct Player players[], int playerCnt) {
     erase();
-    guiPrintLineMid(-2, "GAME OVER");
-    guiPrintLineMid(0, "SCOREBOARD");
-    guiPrintLineMid(1, "--------------------");
+    guiPrintLineMid(0, "FINAL SCORE");
+    guiPrintLineMid(1, "----------------------");
     for (int i = 0; i < playerCnt; i++) {
         mvprintw((scrCtrY + 2 + i), (scrCtrX - ((MAX_UNAME_SIZE + 4) / 2)), "%16s %3d", players[i].uname, players[i].points);
     }

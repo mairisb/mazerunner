@@ -22,25 +22,25 @@ enum MsgType getMsgType(char *msg) {
 
 char *getMsgTypeStr(enum MsgType msgType) {
     switch (msgType) {
-        JOIN_GAME:
+        case JOIN_GAME:
             return "JOIN_GAME";
-        MOVE:
+        case MOVE:
             return "MOVE";
-        LOBBY_INFO:
+        case LOBBY_INFO:
             return "LOBBY_INFO";
-        GAME_IN_PROGRESS:
+        case GAME_IN_PROGRESS:
             return "GAME_IN_PROGRESS";
-        USERNAME_TAKEN:
+        case USERNAME_TAKEN:
             return "USERNAME_TAKEN";
-        GAME_START:
+        case GAME_START:
             return "GAME_START";
-        MAP_ROW:
+        case MAP_ROW:
             return "MAP_ROW";
-        GAME_UPDATE:
+        case GAME_UPDATE:
             return "GAME_UPDATE";
-        PLAYER_DEAD:
+        case PLAYER_DEAD:
             return "PLAYER_DEAD";
-        GAME_END:
+        case GAME_END:
             return "GAME_END";
         default:
             return "UNKNOWN";
@@ -60,10 +60,11 @@ int sockConn(char *ip, int port) {
     struct sockaddr_in server;
     int connRes;
 
-    /* Set server connection parameters */
+    /* set server connection parameters */
     server.sin_addr.s_addr = inet_addr(ip);
     server.sin_family = AF_INET;
     server.sin_port = htons(port);
+    /* connect to the server */
     logOut("[INFO]\tConnecting to %s:%d\n", ip, port);
     connRes = connect(netSock, (struct sockaddr *) &server, sizeof(struct sockaddr_in));
     if (connRes < 0) {
@@ -97,7 +98,7 @@ int sockSend(char *message, int messageSize) {
 
 int sockSendJoinGame(char *uname) {
     const int msgSize = 1 + MAX_UNAME_SIZE;
-    char msg[msgSize];
+    char msg[msgSize + 1];
     int retVal;
 
     memset(msg, 0, msgSize);
@@ -115,7 +116,7 @@ int sockSendMove(enum Direction direction) {
     char msg[msgSize+1];
     int retVal;
 
-    sprintf(msg, "%c%c", MOVE, (char)direction);
+    sprintf(msg, "%c%c", MOVE, direction);
     retVal = sockSend(msg, msgSize);
 
     logOut("[INFO]\tMessage MOVE sent: %.*s\n", msgSize, msg);
@@ -267,8 +268,8 @@ int sockRecvGameUpdate(char *buff) {
             playerCnt = buff[1] - '0';
             /* get player usernames and points */
             msgSize += sockRecv((buff + msgSize), ((MAX_UNAME_SIZE + 3) * playerCnt));
-            // logOut("[INFO]\tMessage GAME_END received: ");
-            // logOutBytes(buff, msgSize);
+            logOut("[INFO]\tMessage GAME_END received: ");
+            logOutBytes(buff, msgSize);
             return msgSize;
         default:
             logOut("[ERROR]\tUnexpected message received\n\tExpected one of: GAME_UPDATE PLAYER_DEAD GAME_OVER\n\tReceived: %s\n", getMsgTypeStr(msgType));

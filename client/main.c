@@ -26,6 +26,7 @@ int mapHeight, mapWidth;
 char map[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1];
 int foodCnt;
 struct Food food[MAX_FOOD_CNT];
+pthread_t threadGetDir;
 
 int parsePlayerInfo(char *msg) {
     int bytesParsed = 0;
@@ -141,14 +142,14 @@ int loadGameEndInfo() {
         strncpy(strNum, (buff + bytesParsed), 3);
         bytesParsed += 3;
         players[i].points = strToInt(strNum, 3);
-        logOut("[DEBUG]\t%s %d\n", players[i].uname, players[i].points);
     }
 
     return bytesParsed;
 }
 
-void *getDirection(void *vargp) {
+void *getDir(void *vargp) {
     while (true) {
+        /* get keyboard input */
         char c = getch();
         switch(c) {
             case 'w':
@@ -245,33 +246,42 @@ int main() {
         sockRecvMapRow(buff, mapWidth);
         loadMapRow();
     }
-
     displayMap(mapHeight, mapWidth, map);
 
+    /* get initial player and food positions */
     sockRecvGameUpdate(buff);
     loadGameUpdateInfo();
-
+    /* display initial player and food positions */
     updateMap(players, playerCnt, food, foodCnt);
 
-    pthread_t thread_id;
-    pthread_create(&thread_id, NULL, getDirection, NULL);
+    /* start reading user keyboard input */
+    pthread_create(&threadGetDir, NULL, getDir, NULL);
 
+    /* game in progress */
     do {
+        /* receive updated player and food info */
         sockRecvGameUpdate(buff);
-        if (getMsgType(buff) != GAME_UPDATE) {
+        msgType = getMsgType(buff);
+        if (msgType != GAME_UPDATE) {
             break;
         }
         loadGameUpdateInfo();
-        displayMap(mapHeight, mapWidth, map);
+        // displayMap(mapHeight, mapWidth, map);
         updateMap(players, playerCnt, food, foodCnt);
     } while (true);
 
-    pthread_cancel(thread_id);
-    pthread_join(thread_id, NULL);
+    /* stop reading user keyboard input */
+    pthread_cancel(threadGetDir);
+    pthread_join(threadGetDir, NULL);
 
-    if (getMsgType(buff) == PLAYER_DEAD) {
+    /* receive final score if player was killed */
+    if (msgType == PLAYER_DEAD) {
         sockRecvGameUpdate(buff);
     }
+
+    displayStr("GAME OVER");
+    sleep(2);
+    flushinp();
 
     loadGameEndInfo();
 

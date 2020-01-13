@@ -25,6 +25,7 @@ enum Direction {
 int netSock;
 
 enum MsgType getMsgType(char *);
+char *getMsgTypeStr(enum MsgType);
 void sockCreate();
 int sockConn(char *, int);
 int sockSendJoinGame(char *);
