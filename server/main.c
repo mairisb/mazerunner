@@ -289,6 +289,7 @@ int socketSend(int socket, char *message, int messageSize) {
             sentTotal += sentBytes;
         }
     }
+    printf("Sent %d bytes\n", sentTotal);
 
     return 0;
 }
@@ -679,15 +680,22 @@ void resolveIncomingMoves() {
                 } else if ((int) targetSymbol >= 65 && (int) targetSymbol <= 72) { /* Move to other player */
                     int targetPlayerIndex = (int) targetSymbol - 65;
                     struct PlayerData *targetPlayer = &g_players[targetPlayerIndex];
-
                     if (targetPlayer->points > player->points) { /* Move requesting player death scenario */
                         targetPlayer->points += player->points;
+                        if (targetPlayer->points > 100) {
+                            targetPlayer->points = 100;
+                        }
                         player->points = 0;
+                        printf("Sending player dead to %s\n", player->username);
                         socketSend(player->socket, playerDeadMessage, sizeof(S_PLAYER_DEAD));
                         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
                     } else if (targetPlayer->points < player->points) { /* Target player death scenario */
                         player->points += targetPlayer->points;
+                        if (player->points > 100) {
+                            player->points = 100;
+                        }
                         targetPlayer->points = 0;
+                        printf("Sending player dead to %s\n", targetPlayer->username);
                         socketSend(targetPlayer->socket, playerDeadMessage, sizeof(S_PLAYER_DEAD));
                         map[targetRow][targetCol] = playerSymbol;
                         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
@@ -853,7 +861,7 @@ void *handleGameStart(void *args) {
         pthread_exit(NULL);
     }
 
-    printf("Game started");
+    printf("Game started\n");
 
     resolveIncomingMoves();
     pthread_join(g_moveSetterThread, NULL);
