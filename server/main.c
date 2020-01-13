@@ -20,6 +20,7 @@
 #include "libs/utility.h"
 #include "libs/move_queue.h"
 
+/* Sizes of each message parameter */
 #define TYPE_SIZE 1
 #define USERNAME_SIZE 16
 #define PLAYER_COUNT_SIZE 1
@@ -31,11 +32,13 @@
 #define MOVE_SIZE 1
 #define FOOD_COUNT_SIZE 3
 
+/* Maximum amounts */
 #define MAX_PLAYER_COUNT 2
 #define MAX_MAP_HEIGHT 999
 #define MAX_MAP_WIDTH 999
 #define MAX_FOOD_COUNT 999
 
+/* Message type symbols */
 #define R_JOIN_GAME '0'
 #define R_MOVE '1'
 #define S_LOBBY_INFO '2'
@@ -48,6 +51,7 @@
 #define E_USERNAME_TAKEN '4'
 #define E_TECHNICAL 'A'
 
+/* Maximum sizes for all defined messages */
 #define JOIN_GAME_MSG_SIZE (TYPE_SIZE + USERNAME_SIZE + 1)
 #define LOBBY_INFO_MSG_SIZE (TYPE_SIZE + PLAYER_COUNT_SIZE + MAX_PLAYER_COUNT * USERNAME_SIZE + 1)
 #define GAME_START_MSG_SIZE (TYPE_SIZE + PLAYER_COUNT_SIZE + MAX_PLAYER_COUNT * USERNAME_SIZE + MAP_HEIGHT_SIZE + MAP_WIDTH_SIZE + 1)
@@ -83,7 +87,7 @@ struct MapData {
     struct Position *startPositions;
 };
 
-int g_netSocket;
+int g_netSocket; /* The main server socket */
 
 struct MapData g_mapData = {};
 struct PlayerData g_players[MAX_PLAYER_COUNT];
@@ -145,7 +149,7 @@ int addClientToGame(int clientSocket);
 
 /* Pre-listening set up */
 void loadPlayerData();
-void checkAndSetSpawnPositions(char *mapRow, int rowPosition);
+int checkAndSetSpawnPositions(char *mapRow, int rowPosition);
 void allocateMap();
 void loadMapData();
 void init();
@@ -240,6 +244,7 @@ void exitHandler(int status) {
     exit(status);
 }
 
+/* Our only way of correctly stopping the server */
 void sigIntHandler(int sig) {
     printf("Signal caught, stopping server\n");
     exitHandler(0);
@@ -326,10 +331,6 @@ void respondWithError(int clientSocket, char errorType) {
     }
 }
 
-/*************************************
- Functions that add data to messages
-*************************************/
-
 int addUsernamesAndPoints(char *buff) {
     int size = 0;
     int i;
@@ -406,10 +407,6 @@ int addUsernames(char *buff) {
     return size;
 }
 
-/************************************************
- Functions that construct messages for each type
-************************************************/
-
 void sendLobbyInfoMessage() {
     int actualSize = 0;
     char lobbyInfoMessage[LOBBY_INFO_MSG_SIZE] = "";
@@ -451,7 +448,7 @@ void sendMap() {
                 mapRowPtr[j] = ' ';
             }
         }
-        printf("Sending map row: %03d %s\n", i + 1, mapMessage);
+        printf("Sending map row: %s\n", mapMessage);
         sendToAll(mapMessage, actualSize);
     }
 }
@@ -481,15 +478,11 @@ void sendGameEndMessage() {
     sendToAll(gameEndMessage, actualSize);
 }
 
-/***************************************
- Functions for game duration processing
-***************************************/
-
 void resetGame() {
     char **map = g_mapData.map;
     int i;
 
-    printf("Ŗesetting game...\n");
+    printf("Resetting game...\n");
 
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
         struct PlayerData *player = &g_players[i];
@@ -502,7 +495,7 @@ void resetGame() {
         player->points = 1;
         player->requestedMove = 0;
 
-        /* Reset player starting positions back */
+        /* Reset player starting positions back on the simulated map */
         char playerSymbol = (char) 65 + i;
         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
         playerPosition->rowPosition = g_mapData.startPositions[i].rowPosition;
@@ -518,13 +511,14 @@ void resetGame() {
             foodPosition->columnPosition = 0;
         }
     }
+    g_mapData.currentfoodCount = 0;
 
     g_connectedPlayerCount = 0;
 
     setGameStatus(GAME_NOT_STARTED);
     setThreadStatus(THREAD_RUNNING);
 
-    printf("Game reset");
+    printf("Game reset\n");
 }
 
 int gameEnded() {
@@ -562,6 +556,7 @@ void generateFood() {
             int randRowPos = 0;
             int randColPos = 0;
             int i;
+            /* Attempt to spawn the missing food configured amount of times, to avoid endless loop */
             for (i = 0; i < cfg.foodGenAttemptCount; i++) {
                 randRowPos = rand() % (cfg.mapHeight - 2) + 1;
                 randColPos = rand() % (cfg.mapWidth - 2) + 1;
@@ -603,8 +598,13 @@ void resolveIncomingMoves() {
         int tStatus;
 
         sendGameUpdateMessage();
+        tStatus = getThreadStatus();
+        if (tStatus == THREAD_COMPLETED || tStatus == THREAD_ERRORED) {
+            return;
+        }
 
         usleep(100000);
+
         tStatus = getThreadStatus();
         if (tStatus == THREAD_ERRORED || tStatus == THREAD_COMPLETED) {
             return;
@@ -617,9 +617,10 @@ void resolveIncomingMoves() {
             return;
         }
 
-        pthread_mutex_lock(&g_moveLock);
+        pthread_mutex_lock(&g_moveLock); /* Don't let new moves be assigned */
 
         if (moveQueue->head == NULL) {
+            /* No moves have been assigned */
             pthread_mutex_unlock(&g_moveLock);
             continue;
         }
@@ -629,7 +630,7 @@ void resolveIncomingMoves() {
             int playerIndex = moveNode->data;
             struct PlayerData *player = &g_players[playerIndex];
             struct Position *playerPosition = &player->position;
-            char targetSymbol;
+            char targetSymbol; /* Symbol located in the requested coordinates of the map */
             int targetRow = 0;
             int targetCol = 0;
 
@@ -637,28 +638,27 @@ void resolveIncomingMoves() {
                 continue;
             }
 
-            playerSymbol = 65 + playerIndex;
-            /*printf("Player symbol: %c\n", playerSymbol);*/ /* NOTE */
+            playerSymbol = 65 + playerIndex; /* Symbol of the move requesting player on the map */
             switch (player->requestedMove) {
-                case 1:
+                case 1: /* Up */
                     if (playerPosition->rowPosition != 0) {
                         targetRow = playerPosition->rowPosition - 1;
                         targetCol = playerPosition->columnPosition;
                     }
                     break;
-                case 2:
+                case 2: /* Down */
                     if (playerPosition->rowPosition != cfg.mapHeight - 1) {
                         targetRow = playerPosition->rowPosition + 1;
                         targetCol = playerPosition->columnPosition;
                     }
                     break;
-                case 3:
+                case 3: /* Right */
                     if (playerPosition->columnPosition != cfg.mapWidth - 1) {
                         targetRow = playerPosition->rowPosition;
                         targetCol = playerPosition->columnPosition + 1;
                     }
                     break;
-                case 4:
+                case 4: /* Left */
                     if (playerPosition->columnPosition != 0) {
                         targetRow = playerPosition->rowPosition;
                         targetCol = playerPosition->columnPosition - 1;
@@ -669,31 +669,43 @@ void resolveIncomingMoves() {
             if (targetRow != 0 && targetCol != 0) {
                 char **map = g_mapData.map;
                 targetSymbol = map[targetRow][targetCol];
-                /*printf("Target symbol %c\n", targetSymbol);*/ /* NOTE */
-                if (targetSymbol == ' ') {
+
+                if (targetSymbol == ' ') { /* Move to empty position */
                     map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
                     map[targetRow][targetCol] = playerSymbol;
                     playerPosition->rowPosition = targetRow;
                     playerPosition->columnPosition = targetCol;
-                } else if (targetSymbol == '@') {
+                } else if (targetSymbol == '@') { /* Move to food */
                     map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
                     map[targetRow][targetCol] = playerSymbol;
                     playerPosition->rowPosition = targetRow;
                     playerPosition->columnPosition = targetCol;
                     player->points++;
                     resetOneFood(targetRow, targetCol);
-                } else if ((int) targetSymbol >= 65 && (int) targetSymbol <= 72) {
+                } else if ((int) targetSymbol >= 65 && (int) targetSymbol <= 72) { /* Move to other player */
                     int targetPlayerIndex = (int) targetSymbol - 65;
                     struct PlayerData *targetPlayer = &g_players[targetPlayerIndex];
-                    if (targetPlayer->points > player->points) {
+                    if (targetPlayer->points > player->points) { /* Move requesting player death scenario */
                         targetPlayer->points += player->points;
+                        if (targetPlayer->points > cfg.pointWinCount) {
+                            targetPlayer->points = cfg.pointWinCount;
+                        }
+
                         player->points = 0;
-                        socketSend(player->socket, playerDeadMessage, sizeof(S_PLAYER_DEAD));
+                        printf("Sending player dead to %s\n", player->username);
+                        socketSend(player->socket, playerDeadMessage, strlen(playerDeadMessage));
+
                         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
-                    } else if (targetPlayer->points < player->points) {
+                    } else if (targetPlayer->points < player->points) { /* Target player death scenario */
                         player->points += targetPlayer->points;
+                        if (player->points > cfg.pointWinCount) {
+                            player->points = cfg.pointWinCount;
+                        }
+
                         targetPlayer->points = 0;
-                        socketSend(targetPlayer->socket, playerDeadMessage, sizeof(S_PLAYER_DEAD));
+                        printf("Sending player dead to %s\n", targetPlayer->username);
+                        socketSend(targetPlayer->socket, playerDeadMessage, strlen(playerDeadMessage));
+
                         map[targetRow][targetCol] = playerSymbol;
                         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
                         playerPosition->rowPosition = targetRow;
@@ -714,12 +726,8 @@ void resolveIncomingMoves() {
         }
 
 
-        moveQueue->head = NULL;
-        pthread_mutex_unlock(&g_moveLock);
-        tStatus = getThreadStatus();
-        if (tStatus == THREAD_COMPLETED || tStatus == THREAD_ERRORED) {
-            return;
-        }
+        moveQueue->head = NULL; /* Empty move queue */
+        pthread_mutex_unlock(&g_moveLock); /* Let new moves be assigned again */
     }
 }
 
@@ -753,20 +761,20 @@ void readAndSetMove(int playerIndex) {
         return;
     }
 
-    pthread_mutex_lock(&g_moveLock);
+    pthread_mutex_lock(&g_moveLock); /* Don't allow resolving moves while setting one */
 
     if ((cfg.moveResolutionMode == 'F' && player->requestedMove == 0) || cfg.moveResolutionMode == 'L') {
         switch (moveType) {
-            case 85:
+            case 85: /* 'U' for Up */
                 player->requestedMove = 1;
                 break;
-            case 68:
+            case 68: /* 'D' for Down */
                 player->requestedMove = 2;
                 break;
-            case 82:
+            case 82: /* 'R' for Right */
                 player->requestedMove = 3;
                 break;
-            case 76:
+            case 76: /* 'L' for Left */
                 player->requestedMove = 4;
                 break;
             default:
@@ -783,7 +791,7 @@ void readAndSetMove(int playerIndex) {
         }
     }
 
-    pthread_mutex_unlock(&g_moveLock);
+    pthread_mutex_unlock(&g_moveLock); /* Allow resolving moves again after this move has been set */
 }
 
 void *setIncomingMoves(void *args) {
@@ -796,11 +804,12 @@ void *setIncomingMoves(void *args) {
     while(1) {
         tStatus = getThreadStatus();
         if (tStatus == THREAD_ERRORED || tStatus == THREAD_COMPLETED) {
-            pthread_exit(NULL);
+            return NULL;
         }
 
         activeClientCount = 0;
 
+        /* Need to reassign polling client list every time in case players disconnect */
         for (i = 0; i < MAX_PLAYER_COUNT; i++) {
             if (g_players[i].socket > 0) {
                 activeClientCount++;
@@ -812,14 +821,16 @@ void *setIncomingMoves(void *args) {
         if (activeClientCount <= 1) {
             printf("One or no players connected, end game\n");
             setThreadStatus(THREAD_COMPLETED);
-            pthread_exit(NULL);
+            return NULL;
         }
 
+        /* Polling is used because i need to know which client is sending a message,
+           cannot allow to be waiting for a single player */
         ret = poll(pollList, MAX_PLAYER_COUNT, 10);
         if(ret < 0) {
             perror("Error starting client polling");
             setThreadStatus(THREAD_ERRORED);
-            pthread_exit(NULL);
+            return NULL;
         } else if (ret == 0) {
             continue;
         }
@@ -838,7 +849,7 @@ void *setIncomingMoves(void *args) {
         }
     }
 
-    pthread_exit(NULL);
+    return NULL;
 }
 
 void *handleGameStart(void *args) {
@@ -852,10 +863,10 @@ void *handleGameStart(void *args) {
     ret = pthread_create(&g_moveSetterThread, NULL, setIncomingMoves, NULL);
     if (ret != 0) {
         perror("Failed to create moveSetterThread");
-        pthread_exit(NULL);
+        return NULL;
     }
 
-    printf("Game started");
+    printf("Game started\n");
 
     resolveIncomingMoves();
     pthread_join(g_moveSetterThread, NULL);
@@ -867,7 +878,7 @@ void *handleGameStart(void *args) {
         resetGame();
     }
 
-    pthread_exit(NULL);
+    return NULL;
 }
 
 void startGame() {
@@ -896,6 +907,7 @@ int usernameTaken(char *username) {
     return 0;
 }
 
+/* Assigns players random player slots that have different start positions */
 int getRandomFreePosition() {
     int freePositions[MAX_PLAYER_COUNT];
     int freePositionCount = 0;
@@ -983,16 +995,23 @@ void loadPlayerData() {
     }
 }
 
-void checkAndSetSpawnPositions(char *mapRow, int rowPosition) {
+/* Parses the given map row to find player symbols to know where they spawn */
+int checkAndSetSpawnPositions(char *mapRow, int rowPosition) {
     int i;
     for (i = 0; i < cfg.mapWidth; i++) {
         int cellValue = (int) mapRow[i];
         if (cellValue >= 65 && cellValue <= 72) {
             int index = cellValue - 65;
+            if (index > MAX_PLAYER_COUNT - 1) {
+                fprintf(stderr, "Mismatching max player count (%d) and player start position symbol %c\n", MAX_PLAYER_COUNT, mapRow[i]);
+                return 0;
+            }
             g_mapData.startPositions[index].rowPosition = rowPosition;
             g_mapData.startPositions[index].columnPosition = i;
         }
     }
+
+    return 1;
 }
 
 void allocateMap() {
@@ -1062,7 +1081,10 @@ void loadMapData() {
             exitHandler(1);
         }
 
-        checkAndSetSpawnPositions(g_mapData.map[i], i);
+        if (checkAndSetSpawnPositions(g_mapData.map[i], i) == 0) {
+            fclose(mapFile);
+            exitHandler(1);
+        }
     }
 
     fclose(mapFile);
@@ -1085,7 +1107,7 @@ void init() {
 
     printf("Initializing server\n");
 
-    /* initialize locks */
+    /* Initialize locks */
     if (pthread_mutex_init(&g_moveLock, NULL) != 0) {
         fprintf(stderr, "Error initializing move lock\n");
         exit(1);
@@ -1099,7 +1121,7 @@ void init() {
         exit(1);
     }
 
-    /* load initial configuration */
+    /* Load initial configuration */
     if (loadCfg() < 0) {
         fprintf(stderr, "Error loading configuration\n");
         exit(1);
@@ -1111,22 +1133,23 @@ void init() {
         exitHandler(1);
     }
 
-    /* initialization for setting players random positions later. Should only be called once. */
+    /* Initialization for setting players random positions and food generation later,
+       should only be called once */
     srand(time(NULL));
 
-    /* set exitHandler on signals */
+    /* set sigIntHandler to handle signals */
     sigCfg.sa_handler = sigIntHandler;
     sigemptyset(&sigCfg.sa_mask);
     sigCfg.sa_flags = 0;
     sigaction(SIGINT, &sigCfg, NULL);
 
-    /* initialize main server socket */
+    /* Initialize main server socket */
     g_netSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (g_netSocket < 0) {
         perror("Error creating server socket");
         exitHandler(1);
     }
-    /* set main server socket as reusable so reboots work */
+    /* Set main server socket as reusable so reboots work */
     if (setsockopt(g_netSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
         perror("Error on setting socket to SO_REUSEADDR");
         exitHandler(1);
@@ -1158,7 +1181,8 @@ int main() {
     pollList[0].fd = g_netSocket;
     pollList[0].events = POLLIN;
 
-    /* Main connection accepting loop */
+    /* Main connection accepting loop. Uses polling instead of waiting for accepts,
+       because it needs to check whether any threads failed and it should stop */
     while (1) {
         ret = poll(pollList, 1, 100);
         if(ret < 0) {
@@ -1195,7 +1219,6 @@ int main() {
         }
 
         if (getGameStatus() == GAME_NOT_STARTED && (g_connectedPlayerCount == MAX_PLAYER_COUNT || (gameStartTickCount == gameStartTickTimeout && g_connectedPlayerCount >= 2))) {
-            printf("Starting game\n");
             startGame();
             gameStartTickCount = 0;
         }
