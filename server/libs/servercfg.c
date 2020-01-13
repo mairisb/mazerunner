@@ -46,6 +46,8 @@ void parseSetting(char *key, char *val) {
         sscanf(val, "%d", &cfg.gameEndTimeout);
     } else if (strcmp(key, SETTING_FOOD_GEN_ATTEMPT_COUNT) == 0) {
         sscanf(val, "%d", &cfg.foodGenAttemptCount);
+    } else if (strcmp(key, SETTING_TICK_DELAY) == 0) {
+        sscanf(val, "%d", &cfg.tickDelay);
     }
 }
 
@@ -74,16 +76,20 @@ int validateCfg() {
     } else if (cfg.pointWinCount <= 1) {
         fprintf(stderr, "Configuration '%s' value can not be <= 1\n", SETTING_POINT_WIN_COUNT);
         return -1;
-    } else if (cfg.gameStartTimeout <= 0) {
+    } else if (cfg.gameStartTimeout < 0) {
         fprintf(stderr, "Configuration '%s' value can not be < 0\n", SETTING_GAME_START_TIMEOUT);
         return -1;
-    } else if (cfg.gameEndTimeout <= 0) {
+    } else if (cfg.gameEndTimeout < 0) {
         fprintf(stderr, "Configuration '%s' value can not be < 0\n", SETTING_GAME_END_TIMEOUT);
         return -1;
     } else if (cfg.foodGenAttemptCount <= 0) {
         fprintf(stderr, "Configuration '%s' value can not be <= 0\n", SETTING_FOOD_GEN_ATTEMPT_COUNT);
         return -1;
+    } else if (cfg.tickDelay <= 0) {
+        fprintf(stderr, "Configuration '%s' value can not be <= 0\n", SETTING_TICK_DELAY);
+        return -1;
     }
+
 
     return 0;
 }

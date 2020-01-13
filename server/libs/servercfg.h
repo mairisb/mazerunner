@@ -17,6 +17,7 @@
 #define SETTING_GAME_START_TIMEOUT "game_start_timeout"
 #define SETTING_GAME_END_TIMEOUT "game_end_timeout"
 #define SETTING_FOOD_GEN_ATTEMPT_COUNT "food_gen_attempt_count"
+#define SETTING_TICK_DELAY "tick_delay"
 
 struct ServerCfg {
     int serverPort;
@@ -30,6 +31,7 @@ struct ServerCfg {
     int gameStartTimeout;
     int gameEndTimeout;
     int foodGenAttemptCount;
+    int tickDelay;
 };
 
 struct ServerCfg cfg;
