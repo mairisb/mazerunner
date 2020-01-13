@@ -99,7 +99,15 @@ void displayMap(int _mapHeight, int _mapWidth, char mapState[MAX_MAP_HEIGHT][MAX
     refresh();
 }
 
-void updateMap(struct Player players[], int playerCnt, struct Food food[], int foodCnt) {
+void updateMap(struct Player players[], struct Player playersOld[], int playerCnt, struct Food food[], struct Food foodOld[], int foodCnt, int foodCntOld) {
+    /* remove old player and food positions for redrawing */
+    for (int i = 0; i < playerCnt; i++) {
+        mvprintw((mapOriginY + playersOld[i].pos.y), (mapOriginX + playersOld[i].pos.x), " ");
+    }
+    for (int i = 0; i < foodCntOld; i++) {
+        mvprintw((mapOriginY + foodOld[i].pos.y), (mapOriginX + foodOld[i].pos.x), " ");
+    }
+
     mvprintw(mapOriginY, (mapOriginX + mapWidth + 2), "+------------------------+");
     mvprintw((mapOriginY + 1), (mapOriginX + mapWidth + 2), "|                        |");
     for (int i = 0; i < playerCnt; i++) {

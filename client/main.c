@@ -22,10 +22,13 @@ char buff[BUFF_SIZE];
 char uname[MAX_UNAME_SIZE + 1];
 int playerCnt;
 struct Player players[MAX_PLAYER_CNT];
+struct Player playersOld[MAX_PLAYER_CNT];
 int mapHeight, mapWidth;
 char map[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1];
 int foodCnt;
 struct Food food[MAX_FOOD_CNT];
+int foodCntOld;
+struct Food foodOld[MAX_FOOD_CNT];
 pthread_t threadGetDir;
 
 int parsePlayerInfo(char *msg) {
@@ -89,6 +92,17 @@ int loadMapRow() {
 int loadGameUpdateInfo() {
     int bytesParsed = 1;
     char strNum[3];
+
+    /* set old player and food positions for efficient frame redrawing */
+    for (int i = 0; i < playerCnt; i++) {
+        playersOld[i].pos.x = players[i].pos.x;
+        playersOld[i].pos.y = players[i].pos.y;
+    }
+    foodCntOld = foodCnt; /* food count can change on subsequent updates */
+    for (int i = 0; i < foodCntOld; i++) {
+        foodOld[i].pos.x = food[i].pos.x;
+        foodOld[i].pos.y = food[i].pos.y;
+    }
 
     /* get player count */
     playerCnt = buff[1] - '0';
@@ -251,8 +265,20 @@ int main() {
     /* get initial player and food positions */
     sockRecvGameUpdate(buff);
     loadGameUpdateInfo();
+
+    /* initialize old player and food positions */
+    for (int i = 0; i < playerCnt; i++) {
+        playersOld[i].pos.x = players[i].pos.x;
+        playersOld[i].pos.y = players[i].pos.y;
+    }
+    foodCntOld = foodCnt;
+    for (int i = 0; i < foodCntOld; i++) {
+        foodOld[i].pos.x = food[i].pos.x;
+        foodOld[i].pos.y = food[i].pos.y;
+    }
+
     /* display initial player and food positions */
-    updateMap(players, playerCnt, food, foodCnt);
+    updateMap(players, playersOld, playerCnt, food, foodOld, foodCnt, foodCntOld);
 
     /* start reading user keyboard input */
     pthread_create(&threadGetDir, NULL, getDir, NULL);
@@ -266,8 +292,7 @@ int main() {
             break;
         }
         loadGameUpdateInfo();
-        // displayMap(mapHeight, mapWidth, map);
-        updateMap(players, playerCnt, food, foodCnt);
+        updateMap(players, playersOld, playerCnt, food, foodOld, foodCnt, foodCntOld);
     } while (true);
 
     /* stop reading user keyboard input */

@@ -14,7 +14,7 @@ void displayGameInProgress();
 void displayUnameTaken();
 void displayLobbyInfo(int, struct Player []);
 void displayMap(int, int, char [MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1]);
-void updateMap(struct Player [], int, struct Food [], int);
+void updateMap(struct Player [], struct Player [], int, struct Food [], struct Food [], int, int);
 void displayScoreBoard(struct Player [], int);
 void getUname(char *);
 
