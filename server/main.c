@@ -593,6 +593,8 @@ void resolveIncomingMoves() {
     char playerDeadMessage[2] = "";
     playerDeadMessage[0] = S_PLAYER_DEAD;
 
+    printf("PlayerDeadMessage: %s", playerDeadMessage);
+
     while(1) {
         struct Node *moveNode = NULL;
         int tStatus;
