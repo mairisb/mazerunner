@@ -448,7 +448,7 @@ void sendMap() {
                 mapRowPtr[j] = ' ';
             }
         }
-        printf("Sending map row: %03d %s\n", i + 1, mapMessage);
+        printf("Sending map row: %s\n", i + 1, mapMessage);
         sendToAll(mapMessage, actualSize);
     }
 }
@@ -511,6 +511,7 @@ void resetGame() {
             foodPosition->columnPosition = 0;
         }
     }
+    g_mapData.currentfoodCount = 0;
 
     g_connectedPlayerCount = 0;
 
@@ -591,8 +592,6 @@ void resolveIncomingMoves() {
     int gameEndTickTimeout = cfg.gameEndTimeout * 10;
     char playerDeadMessage[2] = "";
     playerDeadMessage[0] = S_PLAYER_DEAD;
-
-    printf("PlayerDeadMessage: %s", playerDeadMessage);
 
     while(1) {
         struct Node *moveNode = NULL;
@@ -1220,7 +1219,6 @@ int main() {
         }
 
         if (getGameStatus() == GAME_NOT_STARTED && (g_connectedPlayerCount == MAX_PLAYER_COUNT || (gameStartTickCount == gameStartTickTimeout && g_connectedPlayerCount >= 2))) {
-            printf("Starting game\n");
             startGame();
             gameStartTickCount = 0;
         }
