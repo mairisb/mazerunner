@@ -75,10 +75,10 @@ int validateCfg() {
         fprintf(stderr, "Configuration '%s' value can not be <= 1\n", SETTING_POINT_WIN_COUNT);
         return -1;
     } else if (cfg.gameStartTimeout <= 0) {
-        fprintf(stderr, "Configuration '%s' value can not be <= 0\n", SETTING_GAME_START_TIMEOUT);
+        fprintf(stderr, "Configuration '%s' value can not be < 0\n", SETTING_GAME_START_TIMEOUT);
         return -1;
     } else if (cfg.gameEndTimeout <= 0) {
-        fprintf(stderr, "Configuration '%s' value can not be <= 0\n", SETTING_GAME_END_TIMEOUT);
+        fprintf(stderr, "Configuration '%s' value can not be < 0\n", SETTING_GAME_END_TIMEOUT);
         return -1;
     } else if (cfg.foodGenAttemptCount <= 0) {
         fprintf(stderr, "Configuration '%s' value can not be <= 0\n", SETTING_FOOD_GEN_ATTEMPT_COUNT);
