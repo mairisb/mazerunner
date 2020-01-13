@@ -804,7 +804,7 @@ void *setIncomingMoves(void *args) {
     while(1) {
         tStatus = getThreadStatus();
         if (tStatus == THREAD_ERRORED || tStatus == THREAD_COMPLETED) {
-            return 0;
+            return NULL;
         }
 
         activeClientCount = 0;
@@ -821,7 +821,7 @@ void *setIncomingMoves(void *args) {
         if (activeClientCount <= 1) {
             printf("One or no players connected, end game\n");
             setThreadStatus(THREAD_COMPLETED);
-            return 0;
+            return NULL;
         }
 
         /* Polling is used because i need to know which client is sending a message,
@@ -830,7 +830,7 @@ void *setIncomingMoves(void *args) {
         if(ret < 0) {
             perror("Error starting client polling");
             setThreadStatus(THREAD_ERRORED);
-            return 0;
+            return NULL;
         } else if (ret == 0) {
             continue;
         }
@@ -849,7 +849,7 @@ void *setIncomingMoves(void *args) {
         }
     }
 
-    return 0;
+    return NULL;
 }
 
 void *handleGameStart(void *args) {
@@ -863,7 +863,7 @@ void *handleGameStart(void *args) {
     ret = pthread_create(&g_moveSetterThread, NULL, setIncomingMoves, NULL);
     if (ret != 0) {
         perror("Failed to create moveSetterThread");
-        return 0;
+        return NULL;
     }
 
     printf("Game started\n");
@@ -878,7 +878,7 @@ void *handleGameStart(void *args) {
         resetGame();
     }
 
-    return 0;
+    return NULL;
 }
 
 void startGame() {
