@@ -303,10 +303,14 @@ int main() {
     if (msgType == PLAYER_DEAD) {
         /* receive final frame */
         sockRecvGameUpdate(buff);
+        msgType = getMsgType(buff);
+    }
+
+    while (msgType != GAME_END) {
         loadGameUpdateInfo();
         updateMap(players, playersOld, playerCnt, food, foodOld, foodCnt, foodCntOld);
-        /* receive final score */
         sockRecvGameUpdate(buff);
+        msgType = getMsgType(buff);
     }
 
     displayGameOver();
