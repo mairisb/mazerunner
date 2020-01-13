@@ -14,7 +14,7 @@
 # food_respawn_threshold = 10
 # The amount of points a player must reach to win the game.
 # point_win_count = 5
-# Time (in seconds) to wait while no new players connect until the game is automatically started.
+# Time (in seconds) to wait while no new players connect until the game is automatically started. 0 for no timer.
 # game_start_timeout = 20
-# Time (in seconds) to wait until the game is automatically ended.
+# Time (in seconds) to wait until the game is automatically ended. 0 for no timer.
 # game_end_timeout = 1000

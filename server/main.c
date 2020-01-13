@@ -33,7 +33,7 @@
 #define FOOD_COUNT_SIZE 3
 
 /* Maximum amounts */
-#define MAX_PLAYER_COUNT 2
+#define MAX_PLAYER_COUNT 8
 #define MAX_MAP_HEIGHT 999
 #define MAX_MAP_WIDTH 999
 #define MAX_FOOD_COUNT 999
@@ -526,7 +526,7 @@ int gameEnded() {
     int i;
     for (i = 0; i < MAX_PLAYER_COUNT; i++) {
         struct PlayerData *player = &g_players[i];
-        if (player->points != 0) {
+        if (player->socket != 0 && player->points != 0) {
             alivePlayerCount++;
             if (player->points == cfg.pointWinCount) {
                 printf("A player has max points, end game\n");
@@ -610,11 +610,13 @@ void resolveIncomingMoves() {
             return;
         }
 
-        gameEndTickCount++;
-        if (gameEndTickCount == gameEndTickTimeout) {
-            printf("Game end timeout reached\n");
-            setThreadStatus(THREAD_COMPLETED);
-            return;
+        if (cfg.gameEndTimeout != 0) {
+            gameEndTickCount++;
+            if (gameEndTickCount == gameEndTickTimeout) {
+                printf("Game end timeout reached\n");
+                setThreadStatus(THREAD_COMPLETED);
+                return;
+            }
         }
 
         pthread_mutex_lock(&g_moveLock); /* Don't let new moves be assigned */
@@ -1195,7 +1197,7 @@ int main() {
         }
 
         if (ret == 0) { /* No clients to accept */
-            if (getGameStatus() == GAME_NOT_STARTED && gameStartTickCount < gameStartTickTimeout) {
+            if (cfg.gameStartTimeout != 0 && getGameStatus() == GAME_NOT_STARTED && gameStartTickCount < gameStartTickTimeout) {
                 gameStartTickCount++;
             }
         } else {
@@ -1212,13 +1214,17 @@ int main() {
                 printf("Client connected\n");
 
                 if (addClientToGame(clientSocket) == 1) {
-                    gameStartTickCount = 0;
                     sendLobbyInfoMessage();
+                    if (cfg.gameStartTimeout != 0) {
+                        gameStartTickCount = 0;
+                    }
                 }
             }
         }
 
-        if (getGameStatus() == GAME_NOT_STARTED && (g_connectedPlayerCount == MAX_PLAYER_COUNT || (gameStartTickCount == gameStartTickTimeout && g_connectedPlayerCount >= 2))) {
+        if (getGameStatus() == GAME_NOT_STARTED &&
+        (g_connectedPlayerCount == MAX_PLAYER_COUNT ||
+        (cfg.gameStartTimeout != 0 && gameStartTickCount == gameStartTickTimeout && g_connectedPlayerCount >= 2))) {
             startGame();
             gameStartTickCount = 0;
         }
