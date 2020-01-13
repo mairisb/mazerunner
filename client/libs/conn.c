@@ -272,7 +272,9 @@ int sockRecvGameUpdate(char *buff) {
             logOutBytes(buff, msgSize);
             return msgSize;
         default:
-            logOut("[ERROR]\tUnexpected message received\n\tExpected one of: GAME_UPDATE PLAYER_DEAD GAME_OVER\n\tReceived: %s\n", getMsgTypeStr(msgType));
+            logOut("[ERROR]\tUnexpected message received\n\tExpected one of: GAME_UPDATE PLAYER_DEAD GAME_END\n\tReceived: %s\n", getMsgTypeStr(msgType));
+            logOut("msg: ");
+            logOutBytes(buff, 1);
             exit(1);
     }
 }

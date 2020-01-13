@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <ncurses.h>
 #include <string.h>
+ #include <unistd.h>
 
 #define ALT_KEY_BACKSPACE 127
 
@@ -86,7 +87,7 @@ void displayLobbyInfo(int playerCnt, struct Player players[]) {
     refresh();
 }
 
-void displayMap(int _mapHeight, int _mapWidth, char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1]) {
+void displayMap(char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1], int _mapHeight, int _mapWidth, struct Player players[], int playerCnt) {
     mapHeight = _mapHeight;
     mapWidth = _mapWidth;
     mapOriginY = ((scrHeight - mapHeight) / 2);
@@ -101,7 +102,11 @@ void displayMap(int _mapHeight, int _mapWidth, char mapState[MAX_MAP_HEIGHT][MAX
     for (int i = 0; i < ((MAX_PLAYER_CNT * 2) + 1); i++) {
         mvprintw((mapOriginY + 1 + i), (mapOriginX - 28), "|                        |");
     }
-    mvprintw((mapOriginY + 1 + ((MAX_PLAYER_CNT * 2) + 1)), (mapOriginX - 28), "+------------------------+");
+    mvprintw((mapOriginY + (MAX_PLAYER_CNT * 2) + 2), (mapOriginX - 28), "+------------------------+");
+
+    for (int i = 0; i < playerCnt; i++) {
+        mvprintw((mapOriginY + 2 + (2 * i)), (mapOriginX - 26), "%16s %c", players[i].uname, ('A' + i));
+    }
 
     refresh();
 }
@@ -116,8 +121,10 @@ void updateMap(struct Player players[], struct Player playersOld[], int playerCn
     }
 
     for (int i = 0; i < playerCnt; i++) {
-        mvprintw((mapOriginY + players[i].pos.y), (mapOriginX + players[i].pos.x), "%c", ('A' + i));
-        mvprintw(mapOriginY + 2 + 2 * i, (mapOriginX - 26), "%16s %c %3d", players[i].uname, ('A' + i), players[i].points);
+        if (players[i].points != 0) {
+            mvprintw((mapOriginY + players[i].pos.y), (mapOriginX + players[i].pos.x), "%c", ('A' + i));
+        }
+        mvprintw((mapOriginY + 2 + (2 * i)), (mapOriginX - 7), "%3d", players[i].points);
     }
     for (int i = 0; i < foodCnt; i++) {
         mvprintw((mapOriginY + food[i].pos.y), (mapOriginX + food[i].pos.x), "@");
@@ -134,6 +141,16 @@ void displayScoreBoard(struct Player players[], int playerCnt) {
         mvprintw((scrCtrY + 2 + i), (scrCtrX - ((MAX_UNAME_SIZE + 4) / 2)), "%16s %3d", players[i].uname, players[i].points);
     }
     refresh();
+    getch();
+}
+
+void displayGameOver() {
+    guiPrintLineMid(-((mapHeight / 2) + 3), "GAME OVER");
+    refresh();
+    sleep(2);
+    guiPrintLineMid(-((mapHeight / 2) + 2), "<Press any key to continue>");
+    refresh();
+    flushinp();
     getch();
 }
 

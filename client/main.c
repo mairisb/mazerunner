@@ -260,7 +260,7 @@ int main() {
         sockRecvMapRow(buff, mapWidth);
         loadMapRow();
     }
-    displayMap(mapHeight, mapWidth, map);
+    displayMap(map, mapHeight, mapWidth, players, playerCnt);
 
     /* get initial player and food positions */
     sockRecvGameUpdate(buff);
@@ -299,18 +299,19 @@ int main() {
     pthread_cancel(threadGetDir);
     pthread_join(threadGetDir, NULL);
 
-    /* receive final score if player was killed */
+    /* player was killed */
     if (msgType == PLAYER_DEAD) {
+        /* receive final frame */
+        sockRecvGameUpdate(buff);
+        loadGameUpdateInfo();
+        updateMap(players, playersOld, playerCnt, food, foodOld, foodCnt, foodCntOld);
+        /* receive final score */
         sockRecvGameUpdate(buff);
     }
 
-    displayStr("GAME OVER");
-    sleep(2);
-    flushinp();
+    displayGameOver();
 
     loadGameEndInfo();
-
-
     displayScoreBoard(players, playerCnt);
 
     guiEnd();
