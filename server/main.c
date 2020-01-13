@@ -289,7 +289,6 @@ int socketSend(int socket, char *message, int messageSize) {
             sentTotal += sentBytes;
         }
     }
-    printf("Sent %d bytes\n", sentTotal);
 
     return 0;
 }
@@ -600,8 +599,13 @@ void resolveIncomingMoves() {
         int tStatus;
 
         sendGameUpdateMessage();
+        tStatus = getThreadStatus();
+        if (tStatus == THREAD_COMPLETED || tStatus == THREAD_ERRORED) {
+            return;
+        }
 
         usleep(100000);
+
         tStatus = getThreadStatus();
         if (tStatus == THREAD_ERRORED || tStatus == THREAD_COMPLETED) {
             return;
@@ -687,18 +691,22 @@ void resolveIncomingMoves() {
                         if (targetPlayer->points > cfg.pointWinCount) {
                             targetPlayer->points = cfg.pointWinCount;
                         }
+
                         player->points = 0;
                         printf("Sending player dead to %s\n", player->username);
                         socketSend(player->socket, playerDeadMessage, strlen(playerDeadMessage));
+
                         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
                     } else if (targetPlayer->points < player->points) { /* Target player death scenario */
                         player->points += targetPlayer->points;
                         if (player->points > cfg.pointWinCount) {
                             player->points = cfg.pointWinCount;
                         }
+
                         targetPlayer->points = 0;
                         printf("Sending player dead to %s\n", targetPlayer->username);
                         socketSend(targetPlayer->socket, playerDeadMessage, strlen(playerDeadMessage));
+
                         map[targetRow][targetCol] = playerSymbol;
                         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
                         playerPosition->rowPosition = targetRow;
@@ -721,10 +729,6 @@ void resolveIncomingMoves() {
 
         moveQueue->head = NULL; /* Empty move queue */
         pthread_mutex_unlock(&g_moveLock); /* Let new moves be assigned again */
-        tStatus = getThreadStatus();
-        if (tStatus == THREAD_COMPLETED || tStatus == THREAD_ERRORED) {
-            return;
-        }
     }
 }
 
