@@ -687,7 +687,7 @@ void resolveIncomingMoves() {
                         }
                         player->points = 0;
                         printf("Sending player dead to %s\n", player->username);
-                        socketSend(player->socket, playerDeadMessage, sizeof(S_PLAYER_DEAD));
+                        socketSend(player->socket, playerDeadMessage, strlen(playerDeadMessage));
                         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
                     } else if (targetPlayer->points < player->points) { /* Target player death scenario */
                         player->points += targetPlayer->points;
@@ -696,7 +696,7 @@ void resolveIncomingMoves() {
                         }
                         targetPlayer->points = 0;
                         printf("Sending player dead to %s\n", targetPlayer->username);
-                        socketSend(targetPlayer->socket, playerDeadMessage, sizeof(S_PLAYER_DEAD));
+                        socketSend(targetPlayer->socket, playerDeadMessage, strlen(playerDeadMessage));
                         map[targetRow][targetCol] = playerSymbol;
                         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
                         playerPosition->rowPosition = targetRow;
