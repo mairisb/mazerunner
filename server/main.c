@@ -682,8 +682,8 @@ void resolveIncomingMoves() {
                     struct PlayerData *targetPlayer = &g_players[targetPlayerIndex];
                     if (targetPlayer->points > player->points) { /* Move requesting player death scenario */
                         targetPlayer->points += player->points;
-                        if (targetPlayer->points > 100) {
-                            targetPlayer->points = 100;
+                        if (targetPlayer->points > cfg.pointWinCount) {
+                            targetPlayer->points = cfg.pointWinCount;
                         }
                         player->points = 0;
                         printf("Sending player dead to %s\n", player->username);
@@ -691,8 +691,8 @@ void resolveIncomingMoves() {
                         map[playerPosition->rowPosition][playerPosition->columnPosition] = ' ';
                     } else if (targetPlayer->points < player->points) { /* Target player death scenario */
                         player->points += targetPlayer->points;
-                        if (player->points > 100) {
-                            player->points = 100;
+                        if (player->points > cfg.pointWinCount) {
+                            player->points = cfg.pointWinCount;
                         }
                         targetPlayer->points = 0;
                         printf("Sending player dead to %s\n", targetPlayer->username);
