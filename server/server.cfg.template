@@ -1,20 +1,24 @@
 # server_port = 7443
 
-# Width and height must match the map in the map file, will be validated.
+#Width and height must match the map in the map file, will be validated.
 # map_height = 31
 # map_width = 121
-# Filename for the file containing the map
+#Filename for the file containing the map
 # map_filename = map.txt
 
-# The maximum amount of food possible at once.
+#The maximum amount of food possible at once.
 # food_count = 50
-# Determines if the first ('F') or last ('L') client sent move will be used during one game tick.
-# move_resolution_mode = L
-# The amount of food at which missing food should respawn.
+#Determines if the first ('F') or last ('L') client sent move will be used during one game tick.
+# move_resolution_mode = F
+#The amount of food at which missing food should respawn.
 # food_respawn_threshold = 10
-# The amount of points a player must reach to win the game.
-# point_win_count = 5
-# Time (in seconds) to wait while no new players connect until the game is automatically started. 0 for no timer.
+#The amount of points a player must reach to win the game.
+# point_win_count = 100
+#Time (in seconds) to wait while no new players connect until the game is automatically started. 0 for no timer.
 # game_start_timeout = 20
-# Time (in seconds) to wait until the game is automatically ended. 0 for no timer.
+#Time (in seconds) to wait until the game is automatically ended. 0 for no timer.
 # game_end_timeout = 1000
+#How many times the server will attmept to generate a single piece of food if unsuccessful.
+# food_gen_attempt_count = 5
+#Time (in milliseconds) how long the server waits before resolving all moves.
+# tick_delay = 50
