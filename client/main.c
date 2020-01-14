@@ -166,7 +166,6 @@ int loadGameEndInfo() {
     winPoints = -1;
     draw = 0;
     for (int i = 0; i < playerCnt; i++) {
-        logOut("[DEBUG]\tPlayer points: %d\n", players[i].points);
         if (players[i].points > winPoints) {
             winPoints = players[i].points;
             draw = 0;
@@ -181,7 +180,6 @@ int loadGameEndInfo() {
             myPoints = players[i].points;
         }
     }
-    logOut("[DEBUG]\tMy %s points: %d\n", uname, myPoints);
 
     /* determine win/lose/draw */
     if (myPoints == winPoints) {

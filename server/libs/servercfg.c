@@ -21,6 +21,7 @@ void printServerCfg() {
     printf("\t%s = %d\n", SETTING_GAME_START_TIMEOUT, cfg.gameStartTimeout);
     printf("\t%s = %d\n", SETTING_GAME_END_TIMEOUT, cfg.gameEndTimeout);
     printf("\t%s = %d\n", SETTING_FOOD_GEN_ATTEMPT_COUNT, cfg.foodGenAttemptCount);
+    printf("\t%s = %d\n", SETTING_TICK_DELAY, cfg.tickDelay);
 }
 
 void parseSetting(char *key, char *val) {
