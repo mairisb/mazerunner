@@ -29,6 +29,7 @@ int foodCnt;
 struct Food food[MAX_FOOD_CNT];
 int foodCntOld;
 struct Food foodOld[MAX_FOOD_CNT];
+int winStatus;
 pthread_t threadGetDir;
 
 int parsePlayerInfo(char *msg) {
@@ -143,6 +144,9 @@ int loadGameUpdateInfo() {
 int loadGameEndInfo() {
     int bytesParsed = 1;
     char strNum[3];
+    int winPoints;
+    int myPoints;
+    int draw;
 
     /* get player count */
     playerCnt = buff[1] - '0';
@@ -158,6 +162,38 @@ int loadGameEndInfo() {
         players[i].points = strToInt(strNum, 3);
     }
 
+    /* get winner points */
+    winPoints = -1;
+    draw = 0;
+    for (int i = 0; i < playerCnt; i++) {
+        logOut("[DEBUG]\tPlayer points: %d\n", players[i].points);
+        if (players[i].points > winPoints) {
+            winPoints = players[i].points;
+            draw = 0;
+        } else if (players[i].points == winPoints) {
+            draw = 1;
+        }
+    }
+
+    /* get my points */
+    for (int i = 0; i < playerCnt; i++) {
+        if (strcmp(uname, players[i].uname) == 0) {
+            myPoints = players[i].points;
+        }
+    }
+    logOut("[DEBUG]\tMy %s points: %d\n", uname, myPoints);
+
+    /* determine win/lose/draw */
+    if (myPoints == winPoints) {
+        if (draw) {
+            winStatus = 0;
+        } else {
+            winStatus = 1;
+        }
+    } else {
+        winStatus = -1;
+    }
+
     return bytesParsed;
 }
 
@@ -168,18 +204,26 @@ void *getDir(void *vargp) {
         switch(c) {
             case 'w':
             case 'W':
+            case 'i':
+            case 'I':
                 sockSendMove(UP);
                 break;
             case 'a':
             case 'A':
+            case 'j':
+            case 'J':
                 sockSendMove(LEFT);
                 break;
             case 's':
             case 'S':
+            case 'k':
+            case 'K':
                 sockSendMove(DOWN);
                 break;
             case 'd':
             case 'D':
+            case 'L':
+            case 'l':
                 sockSendMove(RIGHT);
                 break;
         }
@@ -308,14 +352,13 @@ int main() {
 
     while (msgType != GAME_END) {
         loadGameUpdateInfo();
-        updateMap(players, playersOld, playerCnt, food, foodOld, foodCnt, foodCntOld);
         sockRecvGameUpdate(buff);
         msgType = getMsgType(buff);
     }
 
-    displayGameOver();
-
     loadGameEndInfo();
+    updateMap(players, playersOld, playerCnt, food, foodOld, foodCnt, foodCntOld);
+    displayGameOver(winStatus);
     displayScoreBoard(players, playerCnt);
 
     guiEnd();

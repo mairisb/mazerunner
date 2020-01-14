@@ -157,8 +157,21 @@ void displayScoreBoard(struct Player players[], int playerCnt) {
     getch();
 }
 
-void displayGameOver() {
-    guiPrintLineMid(-((mapHeight / 2) + 3), "GAME OVER");
+void displayGameOver(int winStatus) {
+    guiPrintLineMid(-((mapHeight / 2) + 4), "GAME OVER");
+    attron(A_BOLD);
+    switch (winStatus) {
+        case -1:
+            guiPrintLineMid(-((mapHeight / 2) + 3), "YOU LOST!");
+            break;
+        case 0:
+            guiPrintLineMid(-((mapHeight / 2) + 3), "DRAW!");
+            break;
+        case 1:
+            guiPrintLineMid(-((mapHeight / 2) + 3), "YOU WON!");
+            break;
+    }
+    attroff(A_BOLD);
     refresh();
     sleep(2);
     guiPrintLineMid(-((mapHeight / 2) + 2), "<Press any key to continue>");
