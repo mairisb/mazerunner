@@ -180,6 +180,11 @@ void displayGameOver(int winStatus) {
     getch();
 }
 
+void displayYouLost() {
+    guiPrintLineMid(-((mapHeight / 2) + 3), "YOU LOST!");
+    refresh();
+}
+
 void getUname(char *uname) {
     char c;
     int i;

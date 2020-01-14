@@ -334,6 +334,7 @@ void startGame() {
 
     /* player was killed */
     if (msgType == PLAYER_DEAD) {
+        displayYouLost();
         /* receive final frame */
         sockRecvGameUpdate(buff);
         msgType = getMsgType(buff);
@@ -341,12 +342,12 @@ void startGame() {
 
     while (msgType != GAME_END) {
         loadGameUpdateInfo();
+        updateMap(players, playersOld, playerCnt, food, foodOld, foodCnt, foodCntOld);
         sockRecvGameUpdate(buff);
         msgType = getMsgType(buff);
     }
 
     loadGameEndInfo();
-    updateMap(players, playersOld, playerCnt, food, foodOld, foodCnt, foodCntOld);
     displayGameOver(winStatus);
     displayScoreBoard(players, playerCnt);
 }
