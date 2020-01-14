@@ -230,20 +230,9 @@ void *getDir(void *vargp) {
     }
 }
 
-int main() {
+void startGame() {
     int connRes;
     enum MsgType msgType;
-
-    /* load initial configuration */
-    loadCfg();
-    /* start ncurses */
-    guiStart();
-
-    displayMainScreen();
-
-    /* get username */
-    displayUnamePrompt();
-    getUname(uname);
 
     /* create socket */
     sockCreate();
@@ -360,6 +349,27 @@ int main() {
     updateMap(players, playersOld, playerCnt, food, foodOld, foodCnt, foodCntOld);
     displayGameOver(winStatus);
     displayScoreBoard(players, playerCnt);
+}
+
+int main() {
+    char playAgain;
+
+    /* load initial configuration */
+    loadCfg();
+    /* start ncurses */
+    guiStart();
+
+    displayMainScreen();
+
+    /* get username */
+    displayUnamePrompt();
+    getUname(uname);
+
+    do {
+        startGame();
+        displayStr("Play again? 1. yes, 2. no");
+        playAgain = getch();
+    } while (playAgain == '1');
 
     guiEnd();
     close(netSock);
