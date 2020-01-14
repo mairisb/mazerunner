@@ -94,19 +94,28 @@ void displayMap(char mapState[MAX_MAP_HEIGHT][MAX_MAP_WIDTH + 1], int _mapHeight
     mapOriginX = ((scrWidth - mapWidth) / 2);
 
     erase();
+
+    /* draw map */
     for (int i = 0; i < mapHeight; i++) {
         mvprintw((mapOriginY + i), mapOriginX, mapState[i]);
     }
 
+    /* draw sidebar */
     mvprintw(mapOriginY, (mapOriginX - 28), "+------------------------+");
     for (int i = 0; i < ((MAX_PLAYER_CNT * 2) + 1); i++) {
         mvprintw((mapOriginY + 1 + i), (mapOriginX - 28), "|                        |");
     }
     mvprintw((mapOriginY + (MAX_PLAYER_CNT * 2) + 2), (mapOriginX - 28), "+------------------------+");
-
+    /* write player usernames in the sidebar */
     for (int i = 0; i < playerCnt; i++) {
-        mvprintw((mapOriginY + 2 + (2 * i)), (mapOriginX - 26), "%16s %c", players[i].uname, ('A' + i));
+        mvprintw((mapOriginY + 2 + (2 * i)), (mapOriginX - 26), "%16s", players[i].uname);
     }
+    /* write player letters in the sidebar */
+    attron(A_BOLD);
+    for (int i = 0; i < playerCnt; i++) {
+        mvprintw((mapOriginY + 2 + (2 * i)), (mapOriginX - 9), "%c", ('A' + i));
+    }
+    attroff(A_BOLD);
 
     refresh();
 }
@@ -120,12 +129,16 @@ void updateMap(struct Player players[], struct Player playersOld[], int playerCn
         mvprintw((mapOriginY + foodOld[i].pos.y), (mapOriginX + foodOld[i].pos.x), " ");
     }
 
+    /* draw player positions and points */
+    attron(A_BOLD);
     for (int i = 0; i < playerCnt; i++) {
         if (players[i].points != 0) {
             mvprintw((mapOriginY + players[i].pos.y), (mapOriginX + players[i].pos.x), "%c", ('A' + i));
         }
         mvprintw((mapOriginY + 2 + (2 * i)), (mapOriginX - 7), "%3d", players[i].points);
     }
+    attroff(A_BOLD);
+    /* draw food */
     for (int i = 0; i < foodCnt; i++) {
         mvprintw((mapOriginY + food[i].pos.y), (mapOriginX + food[i].pos.x), "@");
     }
